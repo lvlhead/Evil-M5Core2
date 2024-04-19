@@ -28,8 +28,22 @@
    Users are required to comply with all applicable laws and regulations in their jurisdiction 
    regarding network testing and ethical hacking.
 */
-// remember to change hardcoded webpassword below in the code to ensure no unauthorized access to web interface : !!!!!! CHANGE THIS !!!!! 
-// Also remember that bluetooth is not protected and anyone can connect to it without pincode ( esp librairies issue) to ensure protection serial password is implemented
+
+/*-----------------------------------------------------------------*/
+/*------------------------- CONFIGURATION -------------------------*/
+/*-----------------------------------------------------------------*/
+// remember to change hardcoded webpassword below in the code to ensure no unauthorized access to web interface:
+// Connect to nearby wifi network automaticaly to provide internet to the core2 you can be connected and provide AP at same time
+// experimental
+#define WIFI_SSID ""  // ssid to connect,connection skipped at boot if stay blank ( can be shutdown by different action like probe attack)
+#define WIFI_PASSWORD ""  // wifi password
+#define WEB_ACCESS_PASSWORD "password"  // password for web access to remote check captured credentials and send new html file
+#define LED_ENABLED false  // change this to true to get cool led effect (only on fire)
+// Also remember that bluetooth is not protected and anyone can connect to it without pincode (esp librairies issue) to ensure protection serial password is implemented
+#define BLUETOOTH_NAME "E7vhi3l0tMh53Cro0rne32"
+#define BLUETOOTH_SERIAL_PASSWORD "7h30th3r0n3"
+/*-----------------------------------------------------------------*/
+
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
@@ -62,7 +76,7 @@ ConnectionState connectionState = AWAITING_PASSWORD;
 // end bluetooth password pass
 
 
-int ledOn = true;// change this to true to get cool led effect (only on fire)
+int ledOn = LED_ENABLED;
 
 static constexpr const gpio_num_t SDCARD_CSPIN = GPIO_NUM_4;
 
@@ -85,20 +99,12 @@ int currentListIndex = 0;
 String clonedSSID = "Evil-M5Core2";  
 int topVisibleIndex = 0; 
 
-// Connect to nearby wifi network automaticaly to provide internet to the core2 you can be connected and provide AP at same time 
-// experimental
-const char* ssid = ""; // ssid to connect,connection skipped at boot if stay blank ( can be shutdown by different action like probe attack)
-const char* password = ""; // wifi password
+const char* ssid = WIFI_SSID;
+const char* password = WIFI_PASSWORD;
+const char* accessWebPassword = WEB_ACCESS_PASSWORD;
 
-//!!!!!! CHANGE THIS !!!!!
-//!!!!!! CHANGE THIS !!!!!
-// password for web access to remote check captured credentials and send new html file !!!!!! CHANGE THIS !!!!!
-const char* accessWebPassword = "7h30th3r0n3"; // !!!!!! CHANGE THIS !!!!!
-//!!!!!! CHANGE THIS !!!!!
-const char* bluetoothName = "E7vhi3l0tMh53Cro0rne32"; // !!!!!! CHANGE THIS !!!!!
-#define bluetoothSerialPassword "7h30th3r0n3" // !!!!!! CHANGE THIS !!!!!
-//!!!!!! CHANGE THIS !!!!!
-//!!!!!! CHANGE THIS !!!!!
+const char* bluetoothName = BLUETOOTH_NAME;
+#define bluetoothSerialPassword BLUETOOTH_SERIAL_PASSWORD
 
 String portalFiles[30]; // 30 portals max 
 int numPortalFiles = 0;
@@ -729,8 +735,10 @@ void drawMenu() {
 
 
 void handleDnsRequestSerial() {
-    dnsServer.processNextRequest();
-    server.handleClient();
+    if (isCaptivePortalOn) {
+        dnsServer.processNextRequest();
+        server.handleClient();
+    }
     if (Serial.available()) {
         String command = Serial.readStringUntil('\n');
         checkSerialCommands(command, false);  
