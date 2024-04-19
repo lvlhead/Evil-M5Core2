@@ -2,6 +2,7 @@
     Evil-M5Core2 - WiFi Network Testing and Exploration Tool
 
     Copyright (c) 2024 7h30th3r0n3
+    Copyright (c) 2024 lvlhead
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to deal
@@ -53,7 +54,6 @@
 #include <string>
 #include <set>
 #include <TinyGPS++.h>
-#include <Adafruit_NeoPixel.h> //led
 #include <ArduinoJson.h>
 #include "BLEDevice.h"
 #include <vector>
@@ -66,7 +66,11 @@ extern "C" {
     #include "esp_system.h"
 }
 
-#define APP_VERSION "1.1.9 2024"
+// Evil-M5 Headers
+#include "evil-led.h"
+EvilLED led;
+
+#define APP_VERSION "1.2.0 2024"
 
 // bluetooth password pass
 enum ConnectionState {
@@ -75,9 +79,6 @@ enum ConnectionState {
 };
 ConnectionState connectionState = AWAITING_PASSWORD;
 // end bluetooth password pass
-
-
-int ledOn = LED_ENABLED;
 
 static constexpr const gpio_num_t SDCARD_CSPIN = GPIO_NUM_4;
 
@@ -174,28 +175,6 @@ int defaultBrightness = 255 * 0.35; //  35% default Brightness
 std::vector<std::string> whitelist;
 std::set<std::string> seenWhitelistedSSIDs;
 //config file end
-
-
-//led part
-
-#define PIN 15
-//#define PIN 25 // for M5Stack Core AWS comment above and uncomment this line
-#define NUMPIXELS 10
-
-Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, PIN, NEO_GRB);
-int delayval = 100;
-
-
-void setColorRange(int startPixel, int endPixel, uint32_t color) {
-    for (int i = startPixel; i <= endPixel; i++) {
-        pixels.setPixelColor(i, color);
-    }
-    pixels.show();
-    delay(30);
-}
-
-//led part end
-
 
 // Créer un objet TinyGPS++
 TinyGPSPlus gps;
@@ -403,35 +382,10 @@ void setup() {
         sendMessage("----------------------");
         restoreConfigParameter("brightness");
         drawImage("/img/startup.jpg");
-        if (ledOn){
-            pixels.setPixelColor(4, pixels.Color(255,0,0));
-            pixels.setPixelColor(5, pixels.Color(255,0,0));
-            pixels.show();
-            delay(100);
-
-            pixels.setPixelColor(3, pixels.Color(255,0,0));
-            pixels.setPixelColor(6, pixels.Color(255,0,0));
-            pixels.show();
-            delay(100);
-
-            pixels.setPixelColor(2, pixels.Color(255,0,0));
-            pixels.setPixelColor(7, pixels.Color(255,0,0));
-            pixels.show();
-            delay(100);
-
-            pixels.setPixelColor(1, pixels.Color(255,0,0));
-            pixels.setPixelColor(8, pixels.Color(255,0,0));
-            pixels.show();
-            delay(100);
-
-            pixels.setPixelColor(0, pixels.Color(255,0,0));
-            pixels.setPixelColor(9, pixels.Color(255,0,0));
-            pixels.show();
-            delay(100);
-            delay(1000);
-        }else{
-            delay(2000);
-        }
+#if LED_ENABLED
+        led.pattern1();
+#endif
+        delay(2000);
     }
 
     String batteryLevelStr = getBatteryLevel();
@@ -471,32 +425,9 @@ void setup() {
     sendMessage(randomMessage);
     sendMessage("-------------------");
     firstScanWifiNetworks();
-    if (ledOn){
-        pixels.setPixelColor(4, pixels.Color(0,0,0));
-        pixels.setPixelColor(5, pixels.Color(0,0,0));
-        pixels.show();
-        delay(50);
-
-        pixels.setPixelColor(3, pixels.Color(0,0,0));
-        pixels.setPixelColor(6, pixels.Color(0,0,0));
-        pixels.show();
-        delay(50);
-
-        pixels.setPixelColor(2, pixels.Color(0,0,0));
-        pixels.setPixelColor(7, pixels.Color(0,0,0));
-        pixels.show();
-        delay(50);
-
-        pixels.setPixelColor(1, pixels.Color(0,0,0));
-        pixels.setPixelColor(8, pixels.Color(0,0,0));
-        pixels.show();
-        delay(50);
-
-        pixels.setPixelColor(0, pixels.Color(0,0,0));
-        pixels.setPixelColor(9, pixels.Color(0,0,0));
-        pixels.show();
-        delay(50);
-    }
+#if LED_ENABLED
+    led.pattern2();
+#endif
 
     if (strcmp(ssid, "") != 0) {
         WiFi.mode(WIFI_MODE_APSTA);
@@ -520,7 +451,7 @@ void setup() {
         sendMessage("----------------------");
     }
 
-    pixels.begin(); // led
+    led.init();
     Serial2.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);  //  GPS, change RX_PIN et TX_PIN if needed
 }
 
@@ -858,7 +789,6 @@ void checkSerialCommands(String command, bool fromBluetooth) {
         } else if (command.startsWith("select_network")) {
             int ssidIndex = command.substring(String("select_network ").length()).toInt();
             selectNetwork(ssidIndex);
-            sendMessage("SSID sélectionné: " + currentlySelectedSSID);
         } else if (command.startsWith("change_ssid ")) {
             String newSSID = command.substring(String("change_ssid ").length());
             cloneSSIDForCaptivePortal(newSSID);
@@ -1077,9 +1007,9 @@ void changePortal(int index) {
 void selectNetwork(int index) {
     if (index >= 0 && index < numSsid) {
         currentlySelectedSSID = ssidList[index];
-        sendMessage("SSID sélectionné: " + currentlySelectedSSID);
+        sendMessage("SSID selection: " + currentlySelectedSSID);
     } else {
-        sendMessage("Index SSID invalide.");
+        sendMessage("SSID index invalid.");
     }
 }
 
@@ -1420,57 +1350,9 @@ void createCaptivePortal() {
     sendMessage("-------------------");
     sendMessage("Portal " + ssid + " Deployed with " + selectedPortalFile.substring(7) + " Portal !");
     sendMessage("-------------------");
-    if (ledOn){
-        pixels.setPixelColor(4, pixels.Color(255,0,0));
-        pixels.setPixelColor(5, pixels.Color(255,0,0));
-        pixels.show();
-        delay(50);
-
-        pixels.setPixelColor(3, pixels.Color(255,0,0));
-        pixels.setPixelColor(6, pixels.Color(255,0,0));
-        pixels.show();
-        delay(50);
-
-        pixels.setPixelColor(4, pixels.Color(0,0,0));
-        pixels.setPixelColor(5, pixels.Color(0,0,0));
-        pixels.show();
-        delay(50);
-
-        pixels.setPixelColor(2, pixels.Color(255,0,0));
-        pixels.setPixelColor(7, pixels.Color(255,0,0));
-        pixels.show();
-        delay(50);
-
-        pixels.setPixelColor(3, pixels.Color(0,0,0));
-        pixels.setPixelColor(6, pixels.Color(0,0,0));
-        pixels.show();
-        delay(50);
-
-        pixels.setPixelColor(1, pixels.Color(255,0,0));
-        pixels.setPixelColor(8, pixels.Color(255,0,0));
-        pixels.show();
-        delay(50);
-
-        pixels.setPixelColor(2, pixels.Color(0,0,0));
-        pixels.setPixelColor(7, pixels.Color(0,0,0));
-        pixels.show();
-        delay(50);
-
-        pixels.setPixelColor(0, pixels.Color(255,0,0));
-        pixels.setPixelColor(9, pixels.Color(255,0,0));
-        pixels.show();
-        delay(50);
-
-        pixels.setPixelColor(1, pixels.Color(0,0,0));
-        pixels.setPixelColor(8, pixels.Color(0,0,0));
-        pixels.show();
-        delay(50);
-
-        pixels.setPixelColor(0, pixels.Color(0,0,0));
-        pixels.setPixelColor(9, pixels.Color(0,0,0));
-        pixels.show();
-        delay(50);
-    }
+#if LED_ENABLED
+    led.pattern3();
+#endif
     if (!isProbeKarmaAttackMode && !isAutoKarmaActive) {
         waitAndReturnToMenu("     Portal\n        " + ssid + "\n        Deployed");
     }
@@ -1743,57 +1625,9 @@ void stopCaptivePortal() {
     sendMessage("-------------------");
     sendMessage("Portal Stopped");
     sendMessage("-------------------");
-    if (ledOn){
-        pixels.setPixelColor(0, pixels.Color(255,0,0));
-        pixels.setPixelColor(9, pixels.Color(255,0,0));
-        pixels.show();
-        delay(50);
-
-        pixels.setPixelColor(0, pixels.Color(0,0,0));
-        pixels.setPixelColor(9, pixels.Color(0,0,0));
-        pixels.show();
-        delay(50);
-
-        pixels.setPixelColor(1, pixels.Color(255,0,0));
-        pixels.setPixelColor(8, pixels.Color(255,0,0));
-        pixels.show();
-        delay(50);
-
-        pixels.setPixelColor(1, pixels.Color(0,0,0));
-        pixels.setPixelColor(8, pixels.Color(0,0,0));
-        pixels.show();
-        delay(50);
-
-        pixels.setPixelColor(2, pixels.Color(255,0,0));
-        pixels.setPixelColor(7, pixels.Color(255,0,0));
-        pixels.show();
-        delay(50);
-
-        pixels.setPixelColor(2, pixels.Color(0,0,0));
-        pixels.setPixelColor(7, pixels.Color(0,0,0));
-        pixels.show();
-        delay(50);
-
-        pixels.setPixelColor(3, pixels.Color(255,0,0));
-        pixels.setPixelColor(6, pixels.Color(255,0,0));
-        pixels.show();
-        delay(50);
-
-        pixels.setPixelColor(3, pixels.Color(0,0,0));
-        pixels.setPixelColor(6, pixels.Color(0,0,0));
-        pixels.show();
-        delay(50);
-
-        pixels.setPixelColor(4, pixels.Color(255,0,0));
-        pixels.setPixelColor(5, pixels.Color(255,0,0));
-        pixels.show();
-        delay(50);
-
-        pixels.setPixelColor(4, pixels.Color(0,0,0));
-        pixels.setPixelColor(5, pixels.Color(0,0,0));
-        pixels.show();
-        delay(50);
-    }
+#if LED_ENABLED
+    led.pattern4();
+#endif
     waitAndReturnToMenu("  Portal Stopped");
 }
 
@@ -1900,16 +1734,9 @@ void changePortal() {
             sendMessage("-------------------");
             sendMessage(selectedPortalFile.substring(7) + " portal selected.");
             sendMessage("-------------------");
-            if (ledOn){
-                pixels.setPixelColor(0, pixels.Color(255,0,0));
-                pixels.setPixelColor(9, pixels.Color(255,0,0));
-                pixels.show();
-                delay(50);
-
-                pixels.setPixelColor(0, pixels.Color(0,0,0));
-                pixels.setPixelColor(9, pixels.Color(0,0,0));
-                pixels.show();
-            }
+#if LED_ENABLED
+            led.pattern5();
+#endif
             waitAndReturnToMenu(selectedPortalFile.substring(7) + " selected");
         }
     }
@@ -2531,17 +2358,9 @@ void packetSnifferKarma(void* buf, wifi_promiscuous_pkt_type_t type) {
                 strcpy(ssidsKarma[ssid_count_Karma], ssidKarma);
                 updateDisplayWithSSIDKarma(ssidKarma, ++ssid_count_Karma);
                 sendMessage("Found: " + String(ssidKarma));
-                if (ledOn){
-                    pixels.setPixelColor(0, pixels.Color(255,0,0));
-                    pixels.setPixelColor(9, pixels.Color(255,0,0));
-                    pixels.show();
-                    delay(50);
-
-                    pixels.setPixelColor(0, pixels.Color(0,0,0));
-                    pixels.setPixelColor(9, pixels.Color(0,0,0));
-                    pixels.show();
-                    delay(50);
-                }
+#if LED_ENABLED
+                led.pattern5();
+#endif
             }
         }
     }
@@ -2791,7 +2610,7 @@ void startAPWithSSIDKarma(const char* ssid) {
     createCaptivePortal();
 
     sendMessage("-------------------");
-    sendMessage("Karma Attack started for : " + String(ssid));
+    sendMessage("Karma Attack started for: " + String(ssid));
     sendMessage("-------------------");
 
     M5.Display.clear();
@@ -3299,16 +3118,9 @@ void probeAttack() {
             } else {
                 ssid = generateRandomSSID(32);
             }
-            if (ledOn) {
-                pixels.setPixelColor(0, pixels.Color(255,0,0));
-                pixels.setPixelColor(9, pixels.Color(255,0,0));
-                pixels.show();
-                delay(50);
-
-                pixels.setPixelColor(0, pixels.Color(0,0,0));
-                pixels.setPixelColor(9, pixels.Color(0,0,0));
-                pixels.show();
-            }
+#if LED_ENABLED
+            led.pattern5();
+#endif
             WiFi.begin(ssid.c_str(), "");
 
             M5.Display.setCursor(probesTextX + probesText.length() * 12, 70);
@@ -3577,37 +3389,23 @@ void activateAPForAutoKarma(const char* ssid) {
         sendMessage("-------------------");
         sendMessage("SSID in the whitelist, skipping : " + String(ssid));
         sendMessage("-------------------");
-        if (ledOn){
-            pixels.setPixelColor(0, pixels.Color(255,255,255));
-            pixels.setPixelColor(9, pixels.Color(255,255,255));
-            pixels.show();
-            delay(50);
-            pixels.setPixelColor(0, pixels.Color(0,0,0));
-            pixels.setPixelColor(9, pixels.Color(0,0,0));
-            pixels.show();
-        }
+#if LED_ENABLED
+        led.pattern6();
+#endif
         return;
     }
     if (strcmp(ssid, lastDeployedSSID) == 0) {
         sendMessage("-------------------");
         sendMessage("Skipping already deployed probe : " + String(lastDeployedSSID));
         sendMessage("-------------------");
-        if (ledOn) {
-            pixels.setPixelColor(0, pixels.Color(0,255,0));
-            pixels.setPixelColor(9, pixels.Color(0,255,0));
-            pixels.show();
-            delay(50);
-            pixels.setPixelColor(0, pixels.Color(0,0,0));
-            pixels.setPixelColor(9, pixels.Color(0,0,0));
-            pixels.show();
-            }
+#if LED_ENABLED
+        led.pattern7();
+#endif
         return;
     }
-    if (ledOn) {
-        pixels.setPixelColor(0, pixels.Color(255,0,0));
-        pixels.setPixelColor(9, pixels.Color(255,0,0));
-        pixels.show();
-    }
+#if LED_ENABLED
+    led.pattern8();
+#endif
     isAPDeploying = true;
     isInitialDisplayDone = false;
     setRandomMAC_APKarma(); // Set random MAC for AP
@@ -3634,11 +3432,9 @@ void activateAPForAutoKarma(const char* ssid) {
 
         if (M5.BtnB.wasPressed()) {
             memset(lastDeployedSSID, 0, sizeof(lastDeployedSSID));
-            if (ledOn) {
-                pixels.setPixelColor(0, pixels.Color(0,0,0));
-                pixels.setPixelColor(9, pixels.Color(0,0,0));
-                pixels.show();
-            }
+#if LED_ENABLED
+            led.pattern9();
+#endif
             break;
         }
 
@@ -3685,12 +3481,9 @@ void activateAPForAutoKarma(const char* ssid) {
     sendMessage("-------------------");
     sendMessage("Karma Fail for : " + String(ssid));
     sendMessage("-------------------");
-
-    if (ledOn){
-        pixels.setPixelColor(0, pixels.Color(0,0,0));
-        pixels.setPixelColor(9, pixels.Color(0,0,0));
-        pixels.show();
-    }
+#if LED_ENABLED
+    led.pattern9();
+#endif
 }
 
 
