@@ -33,8 +33,8 @@
 #ifndef EVILCONFIG_H
 #define EVILCONFIG_H
 
-#include <M5Unified.h>
 #include <SD.h>
+#include <M5Unified.h>
 
 class EvilConfig {
   public:
@@ -44,6 +44,7 @@ class EvilConfig {
     bool saveConfigParameter(String key, int value);
     std::vector<String> readCustomProbes();
     bool isSSIDWhitelisted(const char* ssid);
+    void drawImage(const char *filepath);
 
   private:
     int defaultBrightness;

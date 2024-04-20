@@ -45,18 +45,18 @@
 #define BLUETOOTH_SERIAL_PASSWORD "7h30th3r0n3"
 /*-----------------------------------------------------------------*/
 
+#include <vector>
+#include <string>
+#include <set>
+
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
 #include <SD.h>
 #include <M5Unified.h>
-#include <vector>
-#include <string>
-#include <set>
 #include <TinyGPS++.h>
 #include <ArduinoJson.h>
 #include "BLEDevice.h"
-#include <vector>
 
 #include "BluetoothSerial.h"
 BluetoothSerial ESP_BT;
@@ -70,12 +70,17 @@ extern "C" {
 #include "evil-config.h"
 #include "evil-led.h"
 #include "evil-monitor.h"
+#include "evil-util.h"
 
 // Initialize modules
 EvilConfig config;
 EvilMonitor monitor;
 EvilLED led;
 TinyGPSPlus gps;
+
+// Web and DNS Servers
+WebServer server(80);
+DNSServer dnsServer;
 
 #define APP_VERSION "1.2.0 2024"
 
@@ -87,11 +92,6 @@ enum ConnectionState {
 ConnectionState connectionState = AWAITING_PASSWORD;
 // end bluetooth password pass
 
-static constexpr const gpio_num_t SDCARD_CSPIN = GPIO_NUM_4;
-
-WebServer server(80);
-DNSServer dnsServer;
-const byte DNS_PORT = 53;
 
 int currentIndex = 0, lastIndex = -1;
 bool inMenu = true;
@@ -101,13 +101,7 @@ const int menuSize = sizeof(menuItems) / sizeof(menuItems[0]);
 const int maxMenuDisplay = 10;
 int menuStartIndex = 0;
 
-String ssidList[100];
-int numSsid = 0;
-bool isOperationInProgress = false;
-int currentListIndex = 0;
-String clonedSSID = "Evil-M5Core2";
-int topVisibleIndex = 0;
-
+// Set up 
 const char* ssid = WIFI_SSID;
 const char* password = WIFI_PASSWORD;
 const char* accessWebPassword = WEB_ACCESS_PASSWORD;
@@ -193,8 +187,12 @@ int maxChannelScanning = 13;
 
 
 void setup() {
+    // Initialize hardware
     M5.begin();
     Serial.begin(115200);
+    randomSeed(esp_random());
+
+    // Set up GPS Pins based on detected hardware
     int GPS_RX_PIN;
     int GPS_TX_PIN;
     switch (M5.getBoard()) {
@@ -218,6 +216,7 @@ void setup() {
         break;
     }
 
+    // Configure display text/font settings
     M5.Display.setTextSize(2);
     M5.Display.setTextColor(TFT_WHITE);
     M5.Display.setTextFont(1);
@@ -363,13 +362,13 @@ void setup() {
         "    Affirmative Dave,\n        I read you.",
         "  Your Evil-M5Core2 have\n     died of dysentery",
     };
+
+    // Select random message to display
     const int numMessages = sizeof(startUpMessages) / sizeof(startUpMessages[0]);
-
-    randomSeed(esp_random());
-
     int randomIndex = random(numMessages);
     const char* randomMessage = startUpMessages[randomIndex];
 
+    // Attempt to bring up the SD card
     if (!SD.begin(SDCARD_CSPIN, SPI, 25000000)) {
         sendMessage("Error, SD card not mounted...");
     } else {
@@ -377,24 +376,26 @@ void setup() {
         sendMessage("SD card initialized !! ");
         sendMessage("----------------------");
         config.restoreConfigParameter("brightness");
-        drawImage("/img/startup.jpg");
+        config.drawImage("/img/startup.jpg");
 #if LED_ENABLED
         led.pattern1();
 #endif
         delay(2000);
     }
 
+    // Check battery level, display warning if low
     String batteryLevelStr = getBatteryLevel();
     int batteryLevel = batteryLevelStr.toInt();
 
     if (batteryLevel < 15) {
-        drawImage("/img/low-battery.jpg");
+        config.drawImage("/img/low-battery.jpg");
         sendMessage("-------------------");
         sendMessage("!!!!Low Battery!!!!");
         sendMessage("-------------------");
         delay(4000);
     }
 
+    // Display about screen
     int textY = 80;
     int lineOffset = 10;
     int lineY1 = textY - lineOffset;
@@ -420,11 +421,15 @@ void setup() {
     sendMessage(" ");
     sendMessage(randomMessage);
     sendMessage("-------------------");
+
+
+    // Scan for local Wifi networks
     firstScanWifiNetworks();
 #if LED_ENABLED
     led.pattern2();
 #endif
 
+    // Connect to preferred Wifi network if configured
     if (strcmp(ssid, "") != 0) {
         WiFi.mode(WIFI_MODE_APSTA);
         WiFi.begin(ssid, password);
@@ -447,16 +452,9 @@ void setup() {
         sendMessage("----------------------");
     }
 
+    // Complete hardware initialization
     led.init();
     Serial2.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);  //  GPS, change RX_PIN et TX_PIN if needed
-}
-
-
-void drawImage(const char *filepath) {
-    fs::File file = SD.open(filepath);
-    M5.Display.drawJpgFile(SD, filepath);
-
-    file.close();
 }
 
 
@@ -484,10 +482,6 @@ void firstScanWifiNetworks() {
         sendMessage("-------------------");
     }
 }
-
-unsigned long previousMillis = 0;
-const long interval = 1000;
-
 
 void loop() {
     M5.update();

@@ -169,3 +169,9 @@ bool EvilConfig::isSSIDWhitelisted(const char* ssid) {
     }
     return false;
 }
+
+void EvilConfig::drawImage(const char *filepath) {
+    fs::File file = SD.open(filepath);
+    M5.Display.drawJpgFile(SD, filepath);
+    file.close();
+}
