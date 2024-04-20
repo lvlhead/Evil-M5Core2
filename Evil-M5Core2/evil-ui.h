@@ -30,9 +30,48 @@
     regarding network testing and ethical hacking.
 */
 
-#ifndef EVILUTIL_H
-#define EVILUTIL_H
+#ifndef EVILUI_H
+#define EVILUI_H
 
-#define APP_VERSION "1.2.0 2024"
+#include <SD.h>
+#include <M5Unified.h>
+#include <vector>
+
+
+class EvilUI {
+  public:
+    EvilUI();
+    void init();
+    void drawImage(const char *filepath);
+    // Screens
+    void aboutScreen(String message);
+    void textFullScreen(String message);
+    // Menu
+    void menuLoop();
+    void drawMenu();
+    void handleMenuInput();
+    void executeMenuItem(int index);
+    void waitAndReturnToMenu(String message);
+    void resetMenuDraw();
+    // Helpers
+    void setOperationInProgress();
+    void resetLastIndex();
+    bool getInMenu();
+    void setInMenu(bool val);
+    typedef void (EvilUI::*currentMenuInput)(int);
+    currentMenuInput menuInput_funcPtr;
+
+  private:
+    std::vector<String> arrayMainMenu();
+    std::vector<String> arraySubMenu1();
+    std::vector<String> currentMenu;
+    int menuSize;
+    int currentIndex;
+    int lastIndex;
+    bool inMenu;
+    int maxMenuDisplay;
+    int menuStartIndex;
+    bool isOperationInProgress;
+};
 
 #endif

@@ -40,6 +40,7 @@
 #define WIFI_PASSWORD ""  // wifi password
 #define WEB_ACCESS_PASSWORD "password"  // password for web access to remote check captured credentials and send new html file
 #define LED_ENABLED false  // change this to true to get cool led effect (only on fire)
+#define GPS_ENABLED false  // Change this to true to enable GPS logging for Wardriving data
 // Also remember that bluetooth is not protected and anyone can connect to it without pincode (esp librairies issue) to ensure protection serial password is implemented
 #define BLUETOOTH_NAME "E7vhi3l0tMh53Cro0rne32"
 #define BLUETOOTH_SERIAL_PASSWORD "7h30th3r0n3"
@@ -69,20 +70,20 @@ extern "C" {
 // Evil-M5 Headers
 #include "evil-config.h"
 #include "evil-led.h"
+#include "evil-ui.h"
 #include "evil-monitor.h"
 #include "evil-util.h"
 
 // Initialize modules
 EvilConfig config;
-EvilMonitor monitor;
 EvilLED led;
+EvilUI ui;
+EvilMonitor monitor;
 TinyGPSPlus gps;
 
 // Web and DNS Servers
 WebServer server(80);
 DNSServer dnsServer;
-
-#define APP_VERSION "1.2.0 2024"
 
 // bluetooth password pass
 enum ConnectionState {
@@ -91,15 +92,6 @@ enum ConnectionState {
 };
 ConnectionState connectionState = AWAITING_PASSWORD;
 // end bluetooth password pass
-
-
-int currentIndex = 0, lastIndex = -1;
-bool inMenu = true;
-const char* menuItems[] = {"Scan WiFi", "Select Network", "Clone & Details" , "Start Captive Portal", "Stop Captive Portal" , "Change Portal", "Check Credentials", "Delete All Credentials", "Monitor Status", "Probe Attack", "Probe Sniffing", "Karma Attack", "Karma Auto", "Karma Spear", "Select Probe", "Delete Probe", "Delete All Probes", "Brightness", "Bluetooth ON/OFF", "Wardriving", "Beacon Spam", "Deauth Detection", "Wall Of Flipper"};
-const int menuSize = sizeof(menuItems) / sizeof(menuItems[0]);
-
-const int maxMenuDisplay = 10;
-int menuStartIndex = 0;
 
 // Set up 
 const char* ssid = WIFI_SSID;
@@ -185,6 +177,17 @@ char macBuffer[18];
 int maxChannelScanning = 13;
 // deauth and pwnagotchi detector end
 
+String ssidList[100];
+int numSsid = 0;
+int currentListIndex = 0;
+String clonedSSID = "Evil-M5Core2";
+int topVisibleIndex = 0;
+
+const byte DNS_PORT = 53;
+unsigned long previousMillis = 0;
+const long interval = 1000;
+static constexpr const gpio_num_t SDCARD_CSPIN = GPIO_NUM_4;
+
 
 void setup() {
     // Initialize hardware
@@ -217,9 +220,7 @@ void setup() {
     }
 
     // Configure display text/font settings
-    M5.Display.setTextSize(2);
-    M5.Display.setTextColor(TFT_WHITE);
-    M5.Display.setTextFont(1);
+    ui.init();
 
     const char* startUpMessages[] = {
         "  There is no spoon...",
@@ -376,7 +377,7 @@ void setup() {
         sendMessage("SD card initialized !! ");
         sendMessage("----------------------");
         config.restoreConfigParameter("brightness");
-        config.drawImage("/img/startup.jpg");
+        ui.drawImage("/img/startup.jpg");
 #if LED_ENABLED
         led.pattern1();
 #endif
@@ -388,7 +389,7 @@ void setup() {
     int batteryLevel = batteryLevelStr.toInt();
 
     if (batteryLevel < 15) {
-        config.drawImage("/img/low-battery.jpg");
+        ui.drawImage("/img/low-battery.jpg");
         sendMessage("-------------------");
         sendMessage("!!!!Low Battery!!!!");
         sendMessage("-------------------");
@@ -396,23 +397,7 @@ void setup() {
     }
 
     // Display about screen
-    int textY = 80;
-    int lineOffset = 10;
-    int lineY1 = textY - lineOffset;
-    int lineY2 = textY + lineOffset + 30;
-
-    M5.Display.clear();
-    M5.Display.drawLine(0, lineY1, M5.Display.width(), lineY1, TFT_WHITE);
-    M5.Display.drawLine(0, lineY2, M5.Display.width(), lineY2, TFT_WHITE);
-
-    M5.Display.setCursor(80, textY);
-    M5.Display.println(" Evil-M5Core2");
-    M5.Display.setCursor(75, textY + 20);
-    M5.Display.println("By 7h30th3r0n3");
-    M5.Display.setCursor(102, textY + 45);
-    M5.Display.println(APP_VERSION);
-    M5.Display.setCursor(0 , textY + 120);
-    M5.Display.println(randomMessage);
+    ui.aboutScreen(randomMessage);
     sendMessage("-------------------");
     sendMessage(" Evil-M5Core2");
     sendMessage("By 7h30th3r0n3");
@@ -454,7 +439,16 @@ void setup() {
 
     // Complete hardware initialization
     led.init();
+#if GPS_ENABLED
     Serial2.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);  //  GPS, change RX_PIN et TX_PIN if needed
+#endif
+}
+
+
+void loop() {
+    M5.update();
+    handleDnsRequestSerial();
+    ui.menuLoop();
 }
 
 
@@ -481,172 +475,6 @@ void firstScanWifiNetworks() {
         }
         sendMessage("-------------------");
     }
-}
-
-void loop() {
-    M5.update();
-    handleDnsRequestSerial();
-    if (inMenu) {
-        if (lastIndex != currentIndex) {
-            drawMenu();
-            lastIndex = currentIndex;
-        }
-        handleMenuInput();
-    } else {
-        switch (currentStateKarma) {
-            case StartScanKarma:
-                if (M5.BtnB.wasPressed()) {
-                    startScanKarma();
-                    currentStateKarma = ScanningKarma;
-                }
-                break;
-
-            case ScanningKarma:
-                if (M5.BtnB.wasPressed()) {
-                    isKarmaMode = true;
-                    stopScanKarma();
-                    currentStateKarma = ssid_count_Karma > 0 ? StopScanKarma : StartScanKarma;
-                }
-                break;
-
-            case StopScanKarma:
-                handleMenuInputKarma();
-                break;
-
-            case SelectSSIDKarma:
-                handleMenuInputKarma();
-                break;
-        }
-
-        if (M5.BtnB.wasPressed() && currentStateKarma == StartScanKarma) {
-            inMenu = true;
-            isOperationInProgress = false;
-        }
-    }
-}
-
-
-void executeMenuItem(int index) {
-    inMenu = false;
-    isOperationInProgress = true;
-    switch (index) {
-        case 0:
-            scanWifiNetworks();
-            break;
-        case 1:
-            showWifiList();
-            break;
-        case 2:
-            showWifiDetails(currentListIndex);
-            break;
-        case 3:
-            createCaptivePortal();
-            break;
-        case 4:
-            stopCaptivePortal();
-            break;
-        case 5:
-            changePortal();
-            break;
-        case 6:
-            checkCredentials();
-            break;
-        case 7:
-            deleteCredentials();
-            break;
-        case 8:
-            displayMonitorPage1();
-            break;
-        case 9:
-            probeAttack();
-            break;
-        case 10:
-            probeSniffing();
-            break;
-        case 11:
-            karmaAttack();
-            break;
-        case 12:
-            startAutoKarma();
-            break;
-        case 13:
-            karmaSpear();
-            break;
-        case 14:
-            listProbes();
-            break;
-        case 15:
-            deleteProbe();
-            break;
-        case 16:
-            deleteAllProbes();
-            break;
-        case 17:
-            brightness();
-            break;
-        case 18:
-            onOffBleSerial();
-            break;
-        case 19:
-            wardrivingMode();
-            break;
-        case 20:
-            beaconAttack();
-            break;
-        case 21:
-            deauthDetect();
-            break;
-        case 22:
-            wallOfFlipper();
-            break;
-    }
-    isOperationInProgress = false;
-}
-
-
-void handleMenuInput() {
-    if (M5.BtnA.wasPressed()) {
-        currentIndex--;
-        if (currentIndex < 0) {
-            currentIndex = menuSize - 1;
-        }
-    } else if (M5.BtnC.wasPressed()) {
-        currentIndex++;
-        if (currentIndex >= menuSize) {
-            currentIndex = 0;
-        }
-    }
-    menuStartIndex = max(0, min(currentIndex, menuSize - maxMenuDisplay));
-
-    if (M5.BtnB.wasPressed()) {
-        executeMenuItem(currentIndex);
-    }
-}
-
-
-void drawMenu() {
-    M5.Display.clear();
-    M5.Display.setTextSize(2);
-    M5.Display.setTextFont(1);
-
-    int lineHeight = 24;
-    int startX = 5;
-    int startY = 0;
-
-    for (int i = 0; i < maxMenuDisplay; i++) {
-        int menuIndex = menuStartIndex + i;
-        if (menuIndex >= menuSize) break;
-
-        if (menuIndex == currentIndex) {
-            M5.Display.fillRect(0, startY + i * lineHeight, M5.Display.width(), lineHeight, TFT_NAVY);
-            M5.Display.setTextColor(TFT_GREEN);
-        } else {
-            M5.Display.setTextColor(TFT_WHITE);
-        }
-        M5.Display.setCursor(startX, startY + i * lineHeight + (lineHeight / 2) - 8);
-        M5.Display.println(menuItems[menuIndex]);
-    }
-    M5.Display.display();
 }
 
 
@@ -677,7 +505,7 @@ bool bluetoothEnabled = false;
 void onOffBleSerial() {
     M5.Display.setTextColor(TFT_WHITE);
     if (bluetoothEnabled) {
-        waitAndReturnToMenu("   Bluetooth OFF");
+        ui.waitAndReturnToMenu("   Bluetooth OFF");
         ESP_BT.end();
         sendMessage("Bluetooth turned off");
     } else {
@@ -687,7 +515,7 @@ void onOffBleSerial() {
         esp_wifi_set_promiscuous(false);
         esp_wifi_stop();
         esp_wifi_deinit();
-        waitAndReturnToMenu("   Bluetooth ON");
+        ui.waitAndReturnToMenu("   Bluetooth ON");
         ESP_BT.begin(bluetoothName);
         ESP_BT.setPin("730303"); // NOT WORKING // WORK ONLY WITH esp v1.0.1 // workaround password in serial
         sendMessage("Bluetooth turned on");
@@ -767,8 +595,7 @@ void checkSerialCommands(String command, bool fromBluetooth) {
 
     if (connectionState == AUTHENTICATED || !fromBluetooth) {
         if (command == "scan_wifi") {
-            isOperationInProgress = true;
-            inMenu = false;
+            ui.setOperationInProgress();
             scanWifiNetworks();
             sendMessage("-------------------");
             sendMessage("Near Wifi Network : ");
@@ -842,8 +669,7 @@ void checkSerialCommands(String command, bool fromBluetooth) {
             sendMessage("-------------------");
             sendMessage(status);
         } else if (command == "probe_attack") {
-            isOperationInProgress = true;
-            inMenu = false;
+            ui.setOperationInProgress();
             isItSerialCommand = true;
             probeAttack();
             delay(200);
@@ -859,8 +685,7 @@ void checkSerialCommands(String command, bool fromBluetooth) {
                 sendMessage("-------------------");
             }
         } else if (command == "probe_sniffing") {
-            isOperationInProgress = true;
-            inMenu = false;
+            ui.setOperationInProgress();
             probeSniffing();
             delay(200);
         } else if (command == "stop_probe_sniffing") {
@@ -875,8 +700,7 @@ void checkSerialCommands(String command, bool fromBluetooth) {
             int index = command.substring(String("select_probes ").length()).toInt();
             selectProbeSerial(index);
         } else if (command == "karma_auto") {
-            isOperationInProgress = true;
-            inMenu = false;
+            ui.setOperationInProgress();
             startAutoKarma();
             delay(200);
         } else if (command == "exit") {
@@ -1029,7 +853,7 @@ void scanWifiNetworks() {
     sendMessage("-------------------");
     sendMessage("WiFi Scan Completed ");
     sendMessage("-------------------");
-    waitAndReturnToMenu("Scan Completed");
+    ui.waitAndReturnToMenu("Scan Completed");
 }
 
 
@@ -1051,7 +875,7 @@ void showWifiList() {
     }
     M5.Display.display();
 
-    while (!inMenu) {
+    while (!ui.getInMenu()) {
         M5.update();
         handleDnsRequestSerial();
         if (M5.BtnA.wasPressed()) {
@@ -1067,18 +891,18 @@ void showWifiList() {
             }
             showWifiList();
         } else if (M5.BtnB.wasPressed()) {
-            inMenu = true;
+            ui.setInMenu(true);
             sendMessage("-------------------");
             sendMessage("SSID " +ssidList[currentListIndex] + " selected");
             sendMessage("-------------------");
-            waitAndReturnToMenu(ssidList[currentListIndex] + "\n      selected");
+            ui.waitAndReturnToMenu(ssidList[currentListIndex] + "\n      selected");
         }
     }
 }
 
 
 void showWifiDetails(int &networkIndex) {
-    inMenu = false;
+    ui.setInMenu(false);
 
     auto updateDisplay = [&](){
         if (networkIndex >= 0 && networkIndex < numSsid) {
@@ -1136,23 +960,23 @@ void showWifiDetails(int &networkIndex) {
 
     updateDisplay();
 
-    while (!inMenu) {
+    while (!ui.getInMenu()) {
         M5.update();
         handleDnsRequestSerial();
 
         if (M5.BtnC.wasPressed()) {
             cloneSSIDForCaptivePortal(ssidList[networkIndex]);
-            inMenu = true;
-            waitAndReturnToMenu(ssidList[networkIndex] + " Cloned...");
+            ui.setInMenu(true);
+            ui.waitAndReturnToMenu(ssidList[networkIndex] + " Cloned...");
             sendMessage(ssidList[networkIndex] + " Cloned...");
-            drawMenu();
+            ui.drawMenu();
             break; // Sortir de la boucle
         } else if (M5.BtnA.wasPressed()) {
             networkIndex = (networkIndex + 1) % numSsid;
             updateDisplay();
         } else if (M5.BtnB.wasPressed()) {
-            inMenu = true;
-            drawMenu();
+            ui.setInMenu(true);
+            ui.drawMenu();
             break;
         } else if (M5.BtnPWR.wasClicked()) {
             networkIndex = (networkIndex - 1 + numSsid) % numSsid;
@@ -1344,7 +1168,7 @@ void createCaptivePortal() {
     led.pattern3();
 #endif
     if (!isProbeKarmaAttackMode && !isAutoKarmaActive) {
-        waitAndReturnToMenu("     Portal\n        " + ssid + "\n        Deployed");
+        ui.waitAndReturnToMenu("     Portal\n        " + ssid + "\n        Deployed");
     }
 }
 
@@ -1618,7 +1442,7 @@ void stopCaptivePortal() {
 #if LED_ENABLED
     led.pattern4();
 #endif
-    waitAndReturnToMenu("  Portal Stopped");
+    ui.waitAndReturnToMenu("  Portal Stopped");
 }
 
 void listPortalFiles() {
@@ -1688,7 +1512,7 @@ void changePortal() {
     const int listDisplayLimit = M5.Display.height() / 18;
     bool needDisplayUpdate = true;
 
-    while (!inMenu) {
+    while (!ui.getInMenu()) {
         if (needDisplayUpdate) {
             int listStartIndex = max(0, min(portalFileIndex, numPortalFiles - listDisplayLimit));
 
@@ -1720,14 +1544,14 @@ void changePortal() {
             needDisplayUpdate = true;
         } else if (M5.BtnB.wasPressed()) {
             selectedPortalFile = portalFiles[portalFileIndex];
-            inMenu = true;
+            ui.setInMenu(true);
             sendMessage("-------------------");
             sendMessage(selectedPortalFile.substring(7) + " portal selected.");
             sendMessage("-------------------");
 #if LED_ENABLED
             led.pattern5();
 #endif
-            waitAndReturnToMenu(selectedPortalFile.substring(7) + " selected");
+            ui.waitAndReturnToMenu(selectedPortalFile.substring(7) + " selected");
         }
     }
 }
@@ -1779,8 +1603,8 @@ void checkCredentials() {
     }
 
     // Return to menu or next operation
-    inMenu = true; // Assuming this flag controls whether you're in the main menu
-    drawMenu(); // Redraw the main menu
+    ui.setInMenu(true); // Assuming this flag controls whether you're in the main menu
+    ui.drawMenu(); // Redraw the main menu
 }
 
 void displayCredentials(int index) {
@@ -1870,17 +1694,17 @@ void deleteCredentials() {
             sendMessage("-------------------");
             sendMessage("credentials.txt deleted");
             sendMessage("-------------------");
-            waitAndReturnToMenu("Deleted successfully");
+            ui.waitAndReturnToMenu("Deleted successfully");
             sendMessage("Credentials deleted successfully");
         } else {
             sendMessage("-------------------");
             sendMessage("Error deleteting credentials.txt ");
             sendMessage("-------------------");
-            waitAndReturnToMenu("Error..");
+            ui.waitAndReturnToMenu("Error..");
             sendMessage("Error opening file for deletion");
         }
     } else {
-        waitAndReturnToMenu("Deletion cancelled");
+        ui.waitAndReturnToMenu("Deletion cancelled");
     }
 }
 
@@ -1934,7 +1758,7 @@ void displayMonitorPage1() {
 
     M5.Display.display();
 
-    while (!inMenu) {
+    while (!ui.getInMenu()) {
         M5.update();
         handleDnsRequestSerial();
         server.handleClient();
@@ -1963,8 +1787,8 @@ void displayMonitorPage1() {
             displayMonitorPage2();
             break;
         } else if (M5.BtnB.wasPressed()) {
-            inMenu = true;
-            drawMenu();
+            ui.setInMenu(true);
+            ui.drawMenu();
             break;
         }
 
@@ -2013,7 +1837,7 @@ void displayMonitorPage2() {
 
     M5.Display.display();
 
-    while (!inMenu) {
+    while (!ui.getInMenu()) {
         M5.update();
         handleDnsRequestSerial();
         if (M5.BtnA.wasPressed()) {
@@ -2023,8 +1847,8 @@ void displayMonitorPage2() {
             displayMonitorPage3();
             break;
         } else if (M5.BtnB.wasPressed()) {
-            inMenu = true;
-            drawMenu();
+            ui.setInMenu(true);
+            ui.drawMenu();
             break;
         }
     }
@@ -2091,7 +1915,7 @@ void displayMonitorPage3() {
 
     M5.Display.display();
 
-    while (!inMenu) {
+    while (!ui.getInMenu()) {
         M5.update();
         handleDnsRequestSerial();
 
@@ -2142,8 +1966,8 @@ void displayMonitorPage3() {
             displayMonitorPage1();
             break;
         } else if (M5.BtnB.wasPressed()) {
-            inMenu = true;
-            drawMenu();
+            ui.setInMenu(true);
+            ui.drawMenu();
             break;
         }
 
@@ -2179,18 +2003,6 @@ void probeSniffing() {
 
 void karmaAttack() {
     drawStartButtonKarma();
-}
-
-void waitAndReturnToMenu(String message) {
-    M5.Display.clear();
-    M5.Display.setTextSize(2);
-    M5.Display.fillRect(0, M5.Display.height() - 20, M5.Display.width(), 20, TFT_BLACK);
-    M5.Display.setCursor(50 , M5.Display.height()/ 2 );
-    M5.Display.println(message);
-    M5.Display.display();
-    delay(1500);
-    inMenu = true;
-    drawMenu();
 }
 
 
@@ -2237,7 +2049,7 @@ void brightness() {
     }
 
     float finalBrightnessPercentage = 100.0 * (currentBrightness - minBrightness) / (maxBrightness - minBrightness);
-    waitAndReturnToMenu("Brightness set to " + String((int)finalBrightnessPercentage) + "%");
+    ui.waitAndReturnToMenu("Brightness set to " + String((int)finalBrightnessPercentage) + "%");
 }
 
 
@@ -2454,8 +2266,8 @@ void stopScanKarma() {
         currentStateKarma = StopScanKarma;
     } else {
         currentStateKarma = StartScanKarma;
-        inMenu = true;
-        drawMenu();
+        ui.setInMenu(true);
+        ui.drawMenu();
     }
     isKarmaMode = false;
     isProbeSniffingMode = false;
@@ -2595,7 +2407,7 @@ void startAPWithSSIDKarma(const char* ssid) {
     M5.Display.clear();
     M5.Display.setCursor(50 , M5.Display.height()/ 2 );
     if (clientCount > 0) {
-    M5.Display.println("Karma Successful!!!");
+        M5.Display.println("Karma Successful!!!");
         sendMessage("-------------------");
         sendMessage("Karma Attack worked !");
         sendMessage("-------------------");
@@ -2611,20 +2423,20 @@ void startAPWithSSIDKarma(const char* ssid) {
     if (confirmPopup("Save " + String(ssid) + " ?" )) {
         saveSSIDToFile(ssid);
     }
-    lastIndex = -1;
-    inMenu = true;
+    ui.resetLastIndex();
+    ui.setInMenu(true);
     isProbeKarmaAttackMode = false;
     currentStateKarma = StartScanKarma;
     memset(ssidsKarma, 0, sizeof(ssidsKarma));
     ssid_count_Karma = 0;
-    drawMenu();
+    ui.drawMenu();
 }
 
 void listProbes() {
     File file = SD.open("/probes.txt", FILE_READ);
     if (!file) {
         sendMessage("Failed to open probes.txt");
-        waitAndReturnToMenu("Failed to open probes.txt");
+        ui.waitAndReturnToMenu("Failed to open probes.txt");
         return;
     }
 
@@ -2644,7 +2456,7 @@ void listProbes() {
         sendMessage("-------------------");
         sendMessage(" No probes found");
         sendMessage("-------------------");
-        waitAndReturnToMenu(" No probes found");
+        ui.waitAndReturnToMenu(" No probes found");
         return;
     }
 
@@ -2704,7 +2516,7 @@ void listProbes() {
     sendMessage("SSID selected: " + probes[selectedIndex]);
     sendMessage("-------------------");
     clonedSSID = probes[selectedIndex];
-    waitAndReturnToMenu(probes[selectedIndex] + " selected");
+    ui.waitAndReturnToMenu(probes[selectedIndex] + " selected");
 }
 
 
@@ -2724,7 +2536,7 @@ void deleteProbe() {
         sendMessage("-------------------");
         sendMessage("Failed to open probes.txt");
         sendMessage("-------------------");
-        waitAndReturnToMenu("Failed to open probes.txt");
+        ui.waitAndReturnToMenu("Failed to open probes.txt");
         return;
     }
 
@@ -2741,7 +2553,7 @@ void deleteProbe() {
     file.close();
 
     if (numProbes == 0) {
-        waitAndReturnToMenu("No probes found");
+        ui.waitAndReturnToMenu("No probes found");
         return;
     }
 
@@ -2803,12 +2615,12 @@ void deleteProbe() {
             sendMessage("-------------------");
             sendMessage(selectedProbe + " deleted");
             sendMessage("-------------------");
-            waitAndReturnToMenu(selectedProbe + " deleted");
+            ui.waitAndReturnToMenu(selectedProbe + " deleted");
         } else {
-            waitAndReturnToMenu("Error deleting probe");
+            ui.waitAndReturnToMenu("Error deleting probe");
         }
     } else {
-        waitAndReturnToMenu("No probe selected");
+        ui.waitAndReturnToMenu("No probe selected");
     }
 }
 
@@ -2900,18 +2712,18 @@ void deleteAllProbes(){
         File file = SD.open("/probes.txt", FILE_WRITE);
         if (file) {
             file.close();
-            waitAndReturnToMenu("Deleted successfully");
+            ui.waitAndReturnToMenu("Deleted successfully");
             sendMessage("-------------------");
             sendMessage("Probes deleted successfully");
             sendMessage("-------------------");
         } else {
-            waitAndReturnToMenu("Error..");
+            ui.waitAndReturnToMenu("Error..");
             sendMessage("-------------------");
             sendMessage("Error opening file for deletion");
             sendMessage("-------------------");
         }
     } else {
-        waitAndReturnToMenu("Deletion cancelled");
+        ui.waitAndReturnToMenu("Deletion cancelled");
     }
 }
 
@@ -3053,8 +2865,8 @@ void probeAttack() {
     sendMessage("-------------------");
     restoreOriginalWiFiSettings();
     useCustomProbes = false;
-    inMenu = true;
-    drawMenu();
+    ui.setInMenu(true);
+    ui.drawMenu();
 }
 
 int currentChannel = 1;
@@ -3207,7 +3019,7 @@ void loopAutoKarma() {
             isAPDeploying = false;
             isAutoKarmaActive = false;
             isInitialDisplayDone = false;
-            inMenu = true;
+            ui.setInMenu(true);
             memset(lastSSID, 0, sizeof(lastSSID));
             memset(lastDeployedSSID, 0, sizeof(lastDeployedSSID));
             newSSIDAvailable = false;
@@ -3238,8 +3050,8 @@ void loopAutoKarma() {
     newSSIDAvailable = false;
     isWaitingForProbeDisplayed = false;
     isInitialDisplayDone = false;
-    inMenu = true;
-    drawMenu();
+    ui.setInMenu(true);
+    ui.drawMenu();
 }
 
 void activateAPForAutoKarma(const char* ssid) {
@@ -3305,13 +3117,13 @@ void activateAPForAutoKarma(const char* ssid) {
             isAPDeploying = false;
             isAutoKarmaActive = false;
             isInitialDisplayDone = false;
-            inMenu = true;
+            ui.setInMenu(true);
             sendMessage("-------------------");
             sendMessage("Karma Successful for : " + String(clonedSSID));
             sendMessage("-------------------");
             memset(lastSSID, 0, sizeof(lastSSID));
             newSSIDAvailable = false;
-            waitAndReturnToMenu("Karma Successful !!! ");
+            ui.waitAndReturnToMenu("Karma Successful !!! ");
             return;
         }
         delay(100);
@@ -3485,6 +3297,7 @@ void wardrivingMode() {
             scanStarted = true;
         }
 
+#if GPS_ENABLED
         bool gpsDataAvailable = false;
         String gpsData;
 
@@ -3527,7 +3340,7 @@ void wardrivingMode() {
                 }
             }
         }
-
+#endif
 
         int n = WiFi.scanComplete();
         if (n > -1) {
@@ -3579,7 +3392,7 @@ void wardrivingMode() {
             if (confirmPopup("List Open Networks?")) {
                 createKarmaList(maxIndex);
             }
-            waitAndReturnToMenu("Stopping Wardriving.");
+            ui.waitAndReturnToMenu("Stopping Wardriving.");
             sendMessage("-------------------");
             sendMessage("Stopping Wardriving");
             sendMessage("-------------------");
@@ -3693,7 +3506,7 @@ void returnToMenu() {
     // Mettez ici le code nécessaire pour nettoyer avant de retourner au menu
     sendMessage("Returning to menu...");
     // Supposer que waitAndReturnToMenu() est la fonction qui retourne au menu
-    waitAndReturnToMenu(" User requested return to menu.");
+    ui.waitAndReturnToMenu(" User requested return to menu.");
 }
 
 void karmaSpear() {
@@ -3730,7 +3543,7 @@ void karmaSpear() {
         if (M5.BtnA.isPressed()) { // Vérifie régulièrement si btnA est pressé
             karmaListFile.close();
             isAutoKarmaActive = false;
-            waitAndReturnToMenu(" Karma Spear Stopped.");
+            ui.waitAndReturnToMenu(" Karma Spear Stopped.");
             return;
         }
 
@@ -3758,7 +3571,7 @@ void karmaSpear() {
     karmaListFile.close();
     isAutoKarmaActive = false;
     sendMessage("Karma Spear Failed...");
-    waitAndReturnToMenu(" Karma Spear Failed...");
+    ui.waitAndReturnToMenu(" Karma Spear Failed...");
 }
 
 
@@ -3875,7 +3688,7 @@ void beaconAttack() {
     sendMessage("Stopping beacon Spam");
     sendMessage("-------------------");
     restoreOriginalWiFiSettings();
-    waitAndReturnToMenu("Beacon Spam Stopped...");
+    ui.waitAndReturnToMenu("Beacon Spam Stopped...");
 }
 
 void snifferCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
@@ -4091,7 +3904,7 @@ void deauthDetect() {
     }
     esp_wifi_set_promiscuous(false);
     autoChannelHop = !autoChannelHop;
-    waitAndReturnToMenu("Stop detection...");
+    ui.waitAndReturnToMenu("Stop detection...");
 }
 
 
@@ -4263,6 +4076,6 @@ void wallOfFlipper(){
         pBLEScan->setActiveScan(true);
         pBLEScan->start(1, false);
     }
-    waitAndReturnToMenu("Stop detection...");
+    ui.waitAndReturnToMenu("Stop detection...");
 }
 // Wof part end

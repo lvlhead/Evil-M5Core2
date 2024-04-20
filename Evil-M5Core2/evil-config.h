@@ -44,7 +44,6 @@ class EvilConfig {
     bool saveConfigParameter(String key, int value);
     std::vector<String> readCustomProbes();
     bool isSSIDWhitelisted(const char* ssid);
-    void drawImage(const char *filepath);
 
   private:
     int defaultBrightness;
