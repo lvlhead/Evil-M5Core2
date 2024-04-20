@@ -67,8 +67,15 @@ extern "C" {
 }
 
 // Evil-M5 Headers
+#include "evil-config.h"
 #include "evil-led.h"
+#include "evil-monitor.h"
+
+// Initialize modules
+EvilConfig config;
+EvilMonitor monitor;
 EvilLED led;
+TinyGPSPlus gps;
 
 #define APP_VERSION "1.2.0 2024"
 
@@ -154,6 +161,7 @@ bool isKarmaMode = false;
 // Probe Sniffing end
 
 // AutoKarma part
+std::set<std::string> seenWhitelistedSSIDs;
 
 volatile bool newSSIDAvailable = false;
 char lastSSID[33] = {0};
@@ -166,18 +174,6 @@ static bool isInitialDisplayDone = false;
 char lastDeployedSSID[33] = {0};
 bool karmaSuccess = false;
 //AutoKarma end
-
-//config file
-const char* configFolderPath = "/config";
-const char* configFilePath = "/config/config.txt";
-int defaultBrightness = 255 * 0.35; //  35% default Brightness
-
-std::vector<std::string> whitelist;
-std::set<std::string> seenWhitelistedSSIDs;
-//config file end
-
-// Créer un objet TinyGPS++
-TinyGPSPlus gps;
 
 bool isItSerialCommand = false;
 
@@ -380,7 +376,7 @@ void setup() {
         sendMessage("----------------------");
         sendMessage("SD card initialized !! ");
         sendMessage("----------------------");
-        restoreConfigParameter("brightness");
+        config.restoreConfigParameter("brightness");
         drawImage("/img/startup.jpg");
 #if LED_ENABLED
         led.pattern1();
@@ -2225,7 +2221,11 @@ void brightness() {
             currentBrightness = min(maxBrightness, currentBrightness + 12);
             brightnessAdjusted = true;
         } else if (M5.BtnB.wasPressed()) {
-            saveConfigParameter("brightness", currentBrightness);
+            if (config.saveConfigParameter("brightness", currentBrightness)) {
+                sendMessage("brightness saved!");
+            } else {
+                sendMessage("Error when opening config.txt for writing");
+            }
             break;
         }
 
@@ -2244,72 +2244,6 @@ void brightness() {
 
     float finalBrightnessPercentage = 100.0 * (currentBrightness - minBrightness) / (maxBrightness - minBrightness);
     waitAndReturnToMenu("Brightness set to " + String((int)finalBrightnessPercentage) + "%");
-}
-
-void saveConfigParameter(String key, int value) {
-    if (!SD.exists(configFolderPath)) {
-        SD.mkdir(configFolderPath);
-    }
-
-    String content = "";
-    File configFile = SD.open(configFilePath, FILE_READ);
-    if (configFile) {
-        while (configFile.available()) {
-            content += configFile.readStringUntil('\n') + '\n';
-        }
-        configFile.close();
-    } else {
-        sendMessage("Error when opening config.txt for reading");
-        return;
-    }
-
-    int startPos = content.indexOf(key + "=");
-    if (startPos != -1) {
-        int endPos = content.indexOf('\n', startPos);
-        String oldValue = content.substring(startPos, endPos);
-        content.replace(oldValue, key + "=" + String(value));
-    } else {
-        content += key + "=" + String(value) + "\n";
-    }
-
-    configFile = SD.open(configFilePath, FILE_WRITE);
-    if (configFile) {
-        configFile.print(content);
-        configFile.close();
-        sendMessage(key + " saved!");
-    } else {
-        sendMessage("Error when opening config.txt for writing");
-    }
-}
-
-
-void restoreConfigParameter(String key) {
-    if (SD.exists(configFilePath)) {
-        File configFile = SD.open(configFilePath, FILE_READ);
-        if (configFile) {
-            String line;
-            int value = defaultBrightness;
-            while (configFile.available()) {
-                line = configFile.readStringUntil('\n');
-                if (line.startsWith(key + "=")) {
-                    value = line.substring(line.indexOf('=') + 1).toInt();
-                    break;
-                }
-            }
-            configFile.close();
-            if (key == "brightness") {
-                M5.Display.setBrightness(value);
-                sendMessage("Brightness restored to " + String(value));
-            }
-        } else {
-            sendMessage("Error when opening config.txt");
-        }
-    } else {
-        sendMessage("Config file not found, using default value");
-        if (key == "brightness") {
-            M5.Display.setBrightness(defaultBrightness);
-        }
-    }
 }
 
 
@@ -2346,7 +2280,7 @@ void packetSnifferKarma(void* buf, wifi_promiscuous_pkt_type_t type) {
             }
 
 
-            if (isSSIDWhitelisted(ssidKarma)) {
+            if (config.isSSIDWhitelisted(ssidKarma)) {
                 if (seenWhitelistedSSIDs.find(ssidKarma) == seenWhitelistedSSIDs.end()) {
                     seenWhitelistedSSIDs.insert(ssidKarma);
                     sendMessage("SSID in whitelist, ignoring: " + String(ssidKarma));
@@ -2468,7 +2402,7 @@ void startScanKarma() {
     esp_wifi_set_promiscuous(true);
     esp_wifi_set_promiscuous_rx_cb(&packetSnifferKarma);
 
-    readConfigFile("/config/config.txt");
+    config.readConfigFile();
     seenWhitelistedSSIDs.clear();
 
     sendMessage("-------------------");
@@ -2606,7 +2540,7 @@ void executeMenuItemKarma(int indexKarma) {
 void startAPWithSSIDKarma(const char* ssid) {
     clonedSSID = String(ssid);
     isProbeKarmaAttackMode = true;
-    readConfigFile("/config/config.txt");
+    config.readConfigFile();
     createCaptivePortal();
 
     sendMessage("-------------------");
@@ -3032,35 +2966,6 @@ void setRandomMAC_STA() {
 }
 
 
-std::vector<String> readCustomProbes(const char* filename) {
-    File file = SD.open(filename, FILE_READ);
-    std::vector<String> customProbes;
-
-    if (!file) {
-        sendMessage("Failed to open file for reading");
-        return customProbes;
-    }
-
-    while (file.available()) {
-        String line = file.readStringUntil('\n');
-        if (line.startsWith("CustomProbes=")) {
-            String probesStr = line.substring(String("CustomProbes=").length());
-            int idx = 0;
-            while ((idx = probesStr.indexOf(',')) != -1) {
-                customProbes.push_back(probesStr.substring(0, idx));
-                probesStr = probesStr.substring(idx + 1);
-            }
-            if (probesStr.length() > 0) {
-                customProbes.push_back(probesStr);
-            }
-            break;
-        }
-    }
-    file.close();
-    return customProbes;
-}
-
-
 int checkNb = 0;
 bool useCustomProbes;
 std::vector<String> customProbes;
@@ -3074,7 +2979,7 @@ void probeAttack() {
         useCustomProbes = confirmPopup("Use custom probes?");
         M5.Display.clear();
         if (useCustomProbes) {
-            customProbes = readCustomProbes("/config/config.txt");
+            customProbes = config.readCustomProbes();
         } else {
             customProbes.clear();
         }
@@ -3207,7 +3112,7 @@ void startAutoKarma() {
     sendMessage("Karma Auto Attack Started....");
     sendMessage("-------------------");
 
-    readConfigFile("/config/config.txt");
+    config.readConfigFile();
     createCaptivePortal();
     WiFi.softAPdisconnect(true);
     loopAutoKarma();
@@ -3237,46 +3142,6 @@ void autoKarmaPacketSniffer(void* buf, wifi_promiscuous_pkt_type_t type) {
         }
     }
 }
-
-
-
-bool readConfigFile(const char* filename) {
-    whitelist.clear();
-    File configFile = SD.open(filename);
-    if (!configFile) {
-        sendMessage("Failed to open config file");
-        return false;
-    }
-
-    while (configFile.available()) {
-        String line = configFile.readStringUntil('\n');
-        if (line.startsWith("KarmaAutoWhitelist=")) {
-            int startIndex = line.indexOf('=') + 1;
-            String ssidList = line.substring(startIndex);
-            if (!ssidList.length()) {
-                break;
-            }
-            int lastIndex = 0, nextIndex;
-            while ((nextIndex = ssidList.indexOf(',', lastIndex)) != -1) {
-                whitelist.push_back(ssidList.substring(lastIndex, nextIndex).c_str());
-                lastIndex = nextIndex + 1;
-            }
-            whitelist.push_back(ssidList.substring(lastIndex).c_str());
-        }
-    }
-    configFile.close();
-    return true;
-}
-
-bool isSSIDWhitelisted(const char* ssid) {
-    for (const auto& wssid : whitelist) {
-        if (wssid == ssid) {
-            return true;
-        }
-    }
-    return false;
-}
-
 
 uint8_t originalMACKarma[6];
 
@@ -3385,7 +3250,7 @@ void loopAutoKarma() {
 
 void activateAPForAutoKarma(const char* ssid) {
     karmaSuccess = false;
-    if (isSSIDWhitelisted(ssid)) {
+    if (config.isSSIDWhitelisted(ssid)) {
         sendMessage("-------------------");
         sendMessage("SSID in the whitelist, skipping : " + String(ssid));
         sendMessage("-------------------");
