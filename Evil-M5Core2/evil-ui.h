@@ -37,40 +37,27 @@
 #include <M5Unified.h>
 #include <vector>
 
+#include "evil-util.h"
 
 class EvilUI {
   public:
     EvilUI();
     void init();
     void drawImage(const char *filepath);
-    // Screens
+    void writeSingleMessage(String message);
+    void writeVectorMessage(std::vector<String> messages, int x, int y);
+    bool confirmPopup(String message);
     void aboutScreen(String message);
-    void textFullScreen(String message);
-    // Menu
-    void menuLoop();
-    void drawMenu();
-    void handleMenuInput();
-    void executeMenuItem(int index);
+    // TODO: Remove old Menu functions
     void waitAndReturnToMenu(String message);
     void resetMenuDraw();
-    // Helpers
     void setOperationInProgress();
-    void resetLastIndex();
     bool getInMenu();
     void setInMenu(bool val);
-    typedef void (EvilUI::*currentMenuInput)(int);
-    currentMenuInput menuInput_funcPtr;
 
   private:
-    std::vector<String> arrayMainMenu();
-    std::vector<String> arraySubMenu1();
-    std::vector<String> currentMenu;
-    int menuSize;
-    int currentIndex;
-    int lastIndex;
     bool inMenu;
     int maxMenuDisplay;
-    int menuStartIndex;
     bool isOperationInProgress;
 };
 
