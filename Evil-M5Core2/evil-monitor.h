@@ -69,6 +69,7 @@ class EvilMonitor {
     int oldNumPasswords;
     unsigned long lastUpdateTime;
     long updateInterval;
+    String macAddresses[10];
 };
 
 #endif

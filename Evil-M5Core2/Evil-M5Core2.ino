@@ -114,10 +114,6 @@ int nbClientsConnected = 0;
 int nbClientsWasConnected = 0;
 int nbPasswords = 0;
 
-
-String macAddresses[10]; // 10 mac address max
-int numConnectedMACs = 0;
-
 File fsUploadFile; // global variable for file upload
 
 String captivePortalPassword = "";
@@ -556,7 +552,7 @@ void firstScanWifiNetworks() {
 
 
 void scanWifiNetworks(CallbackMenuItem& menuItem) {
-    ui.writeSingleMessage("Scan in progress...");
+    ui.writeSingleMessage("Scan in progress...", true);
     firstScanWifiNetworks();
     ui.waitAndReturnToMenu("Scan Completed");
 }
@@ -2166,12 +2162,12 @@ void startAPWithSSIDKarma(const char* ssid) {
     }
 
     if (clientCount > 0) {
-        ui.writeSingleMessage("Karma Successful!!!");
+        ui.writeSingleMessage("Karma Successful!!!", true);
         sendMessage("-------------------");
         sendMessage("Karma Attack worked !");
         sendMessage("-------------------");
     } else {
-        ui.writeSingleMessage(" Karma Failed...");
+        ui.writeSingleMessage(" Karma Failed...", true);
         sendMessage("-------------------");
         sendMessage("Karma Attack failed...");
         sendMessage("-------------------");

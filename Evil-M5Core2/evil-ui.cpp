@@ -44,8 +44,10 @@ void EvilUI::drawImage(const char *filepath) {
     file.close();
 }
 
-void EvilUI::writeSingleMessage(String message) {
-    //M5.Display.clear();
+void EvilUI::writeSingleMessage(String message, bool clearScreen = false) {
+    if (clearScreen) {
+        M5.Display.clear();
+    }
     M5.Display.setTextSize(2);
     M5.Display.setTextColor(TFT_BLACK);
     //M5.Display.setCursor(50 , M5.Display.height()/ 2 );
@@ -91,7 +93,7 @@ void EvilUI::aboutScreen(String message) {
 }
 
 void EvilUI::waitAndReturnToMenu(String message) {
-    writeSingleMessage(message);
+    writeSingleMessage(message, true);
     delay(1500);
     setInMenu(true);
 }

@@ -65,7 +65,6 @@ void EvilMonitor::clearMenuTextArea() {
 }
 
 void EvilMonitor::showMonitorPage() {
-    clearMenuTextArea();
     switch (monitorPage) {
         case 1:
             Page1();
@@ -108,6 +107,10 @@ void EvilMonitor::Page1() {
     //int newNumPasswords = countPasswordsInFile();
     int newNumPasswords = 0;
 
+    if (newNumClients != oldNumClients || newNumPasswords != oldNumPasswords) {
+        clearMenuTextArea();
+    }
+
     std::vector<String> messages;
     messages.push_back("SSID: " + clonedSSID);
     messages.push_back("Portal: " + String(isCaptivePortalOn ? "On" : "Off"));
@@ -129,13 +132,14 @@ void EvilMonitor::Page2() {
     updateConnectedMACs();
     std::vector<String> messages;
     if (macAddresses[0] == "") {
-        ui.writeSingleMessage("No clients connected");
+        ui.writeSingleMessage("No clients connected", false);
     } else {
         for (int i = 0; i < 10; i++) {
             //int y = 30 + i * 20;
             //if (y > M5.Display.height() - 20) break;
             messages.push_back(macAddresses[i]);
         }
+        clearMenuTextArea();
         ui.writeVectorMessage(messages, 10, 50);
     }
 }
@@ -145,7 +149,11 @@ void EvilMonitor::Page3() {
     oldStack = getStack();
     oldRamUsage = getRamUsage();
     oldBatteryLevel = getBatteryLevel();
-    oldTemperature = getTemperature();
+    String newTemperature = getTemperature();
+
+    if (newTemperature != oldTemperature) {
+        clearMenuTextArea();
+    }
 
     std::vector<String> messages;
     messages.push_back("Stack left: " + oldStack + " Kb");
@@ -153,6 +161,7 @@ void EvilMonitor::Page3() {
     messages.push_back("Battery: " + oldBatteryLevel + "%");
     messages.push_back("Temperature: " + oldTemperature + "C");
     ui.writeVectorMessage(messages, 10, 30);
+    oldTemperature = newTemperature;
 }
 
 String EvilMonitor::getMonitoringStatus() {
@@ -218,298 +227,3 @@ String EvilMonitor::getRamUsage() {
     sprintf(buffer, "%.2f", heapSizeInMegabytes);
     return String(buffer);
 }
-
-
-/*
-// *** OLD CODE ***
-int countPasswordsInFile() {
-    File file = SD.open("/credentials.txt");
-    if (!file) {
-        sendMessage("Error opening credentials file for reading");
-        return 0;
-    }
-
-    int passwordCount = 0;
-    while (file.available()) {
-        String line = file.readStringUntil('\n');
-        if (line.startsWith("-- Password --")) {
-            passwordCount++;
-        }
-    }
-
-    file.close();
-    return passwordCount;
-}
-
-
-int oldNumClients = -1;
-int oldNumPasswords = -1;
-String isBluetoothEnabled;
-d
-String getMonitoringStatus() {
-    String status;
-    int numClientsConnected = WiFi.softAPgetStationNum();
-    int numCredentials = countPasswordsInFile();
-
-    status += "Clients: " + String(numClientsConnected) + "\n";
-    status += "Credentials: " + String(numCredentials) + "\n";
-    status += "SSID: " + String(clonedSSID) + "\n";
-    status += "Portal: " + String(isCaptivePortalOn ? "On" : "Off") + "\n";
-    status += "Page: " + String(selectedPortalFile.substring(7)) + "\n";
-    status += "Bluetooth: " + String(bluetoothEnabled ? "ON" : "OFF") + "\n";
-    updateConnectedMACs();
-    status += "Connected MACs:\n";
-    for (int i = 0; i < 10; i++) {
-        if (macAddresses[i] != "") {
-            status += macAddresses[i] + "\n";
-        }
-    }
-    status += "Stack left: " + getStack() + " Kb\n";
-    status += "RAM: " + getRamUsage() + " Mo\n";
-    status += "Battery: " + getBatteryLevel() + "%\n"; // thx to kdv88 to pointing this correction
-    status += "Temperature: " + getTemperature() + "C\n";
-    return status;
-}
-
-void displayMonitorPage1() {
-    M5.Display.clear();
-    M5.Display.setTextSize(2);
-    M5.Display.setTextColor(TFT_WHITE);
-
-    M5.Display.setCursor(10, 90);
-    M5.Display.println("SSID: " + clonedSSID);
-    M5.Display.setCursor(10, 120);
-    M5.Display.println("Portal: " + String(isCaptivePortalOn ? "On" : "Off"));
-    M5.Display.setCursor(10, 150);
-    M5.Display.println("Page: " + selectedPortalFile.substring(7));
-
-    if (bluetoothEnabled) {
-        isBluetoothEnabled = "ON";
-    } else {
-        isBluetoothEnabled = "OFF";
-    }
-    M5.Display.setCursor(10, 180);
-    M5.Display.println("Bluetooth: " + isBluetoothEnabled);
-
-    oldNumClients = -1;
-    oldNumPasswords = -1;
-
-    M5.Display.display();
-
-    while (!inMenu) {
-        M5.update();
-        handleDnsRequestSerial();
-        server.handleClient();
-
-        int newNumClients = WiFi.softAPgetStationNum();
-        int newNumPasswords = countPasswordsInFile();
-
-        if (newNumClients != oldNumClients) {
-            M5.Display.fillRect(10, 30, 200, 20, TFT_BLACK);
-            M5.Display.setCursor(10, 30);
-            M5.Display.println("Clients: " + String(newNumClients));
-            oldNumClients = newNumClients;
-        }
-
-        if (newNumPasswords != oldNumPasswords) {
-            M5.Display.fillRect(10, 60, 200, 20, TFT_BLACK);
-            M5.Display.setCursor(10, 60);
-            M5.Display.println("Passwords: " + String(newNumPasswords));
-            oldNumPasswords = newNumPasswords;
-        }
-
-        if (M5.BtnA.wasPressed()) {
-            displayMonitorPage3();
-            break;
-        } else if (M5.BtnC.wasPressed()) {
-            displayMonitorPage2();
-            break;
-        } else if (M5.BtnB.wasPressed()) {
-            inMenu = true;
-            drawMenu();
-            break;
-        }
-
-        delay(100);
-    }
-}
-
-void updateConnectedMACs() {
-    wifi_sta_list_t stationList;
-    tcpip_adapter_sta_list_t adapterList;
-    esp_wifi_ap_get_sta_list(&stationList);
-    tcpip_adapter_get_sta_list(&stationList, &adapterList);
-
-    for (int i = 0; i < adapterList.num; i++) {
-        char macStr[18];
-        snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
-                 adapterList.sta[i].mac[0], adapterList.sta[i].mac[1], adapterList.sta[i].mac[2],
-                 adapterList.sta[i].mac[3], adapterList.sta[i].mac[4], adapterList.sta[i].mac[5]);
-        macAddresses[i] = String(macStr);
-    }
-}
-
-void displayMonitorPage2() {
-    M5.Display.clear();
-    M5.Display.setTextSize(2);
-    updateConnectedMACs();
-    if (macAddresses[0] == "") {
-        M5.Display.setCursor(10, 30);
-        M5.Display.println("No client connected");
-        sendMessage("----Mac-Address----");
-        sendMessage("No client connected");
-        sendMessage("-------------------");
-    } else {
-        sendMessage("----Mac-Address----");
-        for (int i = 0; i < 10; i++) {
-            int y = 30 + i * 20;
-            if (y > M5.Display.height() - 20) break;
-
-            M5.Display.setCursor(10, y);
-            M5.Display.println(macAddresses[i]);
-            sendMessage(macAddresses[i]);
-        }
-        sendMessage("-------------------");
-    }
-
-
-    M5.Display.display();
-
-    while (!inMenu) {
-        M5.update();
-        handleDnsRequestSerial();
-        if (M5.BtnA.wasPressed()) {
-            displayMonitorPage1();
-            break;
-        } else if (M5.BtnC.wasPressed()) {
-            displayMonitorPage3();
-            break;
-        } else if (M5.BtnB.wasPressed()) {
-            inMenu = true;
-            drawMenu();
-            break;
-        }
-    }
-}
-
-String oldStack = "";
-String oldRamUsage = "";
-String oldBatteryLevel = "";
-String oldTemperature = "";
-
-String getBatteryLevel() {
-    return String(M5.Power.getBatteryLevel());
-}
-
-String getTemperature() {
-    float temperature;
-    M5.Imu.getTemp(&temperature);
-    int roundedTemperature = round(temperature);
-    return String(roundedTemperature);
-}
-
-String getStack() {
-    UBaseType_t stackWordsRemaining = uxTaskGetStackHighWaterMark(NULL);
-    return String(stackWordsRemaining * 4 / 1024.0);
-}
-
-String getRamUsage() {
-    float heapSizeInMegabytes = esp_get_free_heap_size() / 1048576.0;
-    char buffer[10];
-    sprintf(buffer, "%.2f", heapSizeInMegabytes);
-    return String(buffer);
-}
-
-unsigned long lastUpdateTime = 0;
-const long updateInterval = 1000;
-
-void displayMonitorPage3() {
-    M5.Display.clear();
-    M5.Display.setTextSize(2);
-    M5.Display.setTextColor(TFT_WHITE);
-
-    oldStack = getStack();
-    oldRamUsage = getRamUsage();
-    oldBatteryLevel = getBatteryLevel();
-    oldTemperature = getTemperature();
-
-    M5.Display.setCursor(10, 30);
-    M5.Display.println("Stack left: " + oldStack + " Kb");
-    M5.Display.setCursor(10, 60);
-    M5.Display.println("RAM: " + oldRamUsage + " Mo");
-    M5.Display.setCursor(10, 90);
-    M5.Display.println("Battery: " + oldBatteryLevel + "%"); // thx to kdv88 to pointing mistranlastion
-    M5.Display.setCursor(10, 120);
-    M5.Display.println("Temperature: " + oldTemperature + "C");
-
-    M5.Display.display();
-
-    lastUpdateTime = millis();
-
-    oldStack = "";
-    oldRamUsage = "";
-    oldBatteryLevel = "";
-    oldTemperature = "";
-
-    M5.Display.display();
-
-    while (!inMenu) {
-        M5.update();
-        handleDnsRequestSerial();
-
-        unsigned long currentMillis = millis();
-
-
-        if (currentMillis - lastUpdateTime >= updateInterval) {
-            String newStack = getStack();
-            String newRamUsage = getRamUsage();
-            String newBatteryLevel = getBatteryLevel();
-            String newTemperature = getTemperature();
-
-            if (newStack != oldStack) {
-                M5.Display.fillRect(10, 30, 200, 20, TFT_BLACK);
-                M5.Display.setCursor(10, 30);
-                M5.Display.println("Stack left: " + newStack + " Kb");
-                oldStack = newStack;
-            }
-
-            if (newRamUsage != oldRamUsage) {
-                M5.Display.fillRect(10, 60, 200, 20, TFT_BLACK);
-                M5.Display.setCursor(10, 60);
-                M5.Display.println("RAM: " + newRamUsage + " Mo");
-                oldRamUsage = newRamUsage;
-            }
-
-            if (newBatteryLevel != oldBatteryLevel) {
-                M5.Display.fillRect(10, 90, 200, 20, TFT_BLACK);
-                M5.Display.setCursor(10, 90);
-                M5.Display.println("Battery: " + newBatteryLevel + "%");// thx to kdv88 to pointing mistranlastion
-                oldBatteryLevel = newBatteryLevel;
-            }
-
-            if (newTemperature != oldTemperature) {
-                M5.Display.fillRect(10, 120, 200, 20, TFT_BLACK);
-                M5.Display.setCursor(10, 120);
-                M5.Display.println("Temperature: " + newTemperature + "C");
-                oldTemperature = newTemperature;
-            }
-
-            lastUpdateTime = currentMillis;
-        }
-
-        if (M5.BtnA.wasPressed()) {
-            displayMonitorPage2();
-            break;
-        } else if (M5.BtnC.wasPressed()) {
-            displayMonitorPage1();
-            break;
-        } else if (M5.BtnB.wasPressed()) {
-            inMenu = true;
-            drawMenu();
-            break;
-        }
-
-        delay(100);
-    }
-}
-*/
