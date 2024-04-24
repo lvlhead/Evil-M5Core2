@@ -33,7 +33,13 @@
 #ifndef EVILUTIL_H
 #define EVILUTIL_H
 
+#include <SD.h>
+#include <M5Unified.h>
+
 #define APP_VERSION "1.2.0 2024"
+
+File openFile(String filename, const char* mode);
+void sendUtilMessage(String message);
 
 extern String clonedSSID;
 extern bool isCaptivePortalOn;

@@ -40,16 +40,9 @@ extern "C" {
 #include "evil-monitor.h"
 
 EvilMonitor::EvilMonitor() {
-    oldStack = "";
-    oldRamUsage = "";
-    oldBatteryLevel = "";
-    oldTemperature = "";
-    lastUpdateTime = 0;
-    updateInterval = 1000;
     monitorPage = 1;
-}
-
-void EvilMonitor::init() {
+    oldNumClients = -1;
+    oldNumPasswords = -1;
 }
 
 void EvilMonitor::emptyMonitorCallback(CallbackMenuItem& menuItem) {
@@ -76,6 +69,10 @@ void EvilMonitor::showMonitorPage() {
                 break;
         }
     }
+}
+
+void EvilMonitor::resetMonitorPage() {
+    monitorPage = 1;
 }
 
 void EvilMonitor::nextPage() {
@@ -108,18 +105,15 @@ void EvilMonitor::Page1() {
     int newNumPasswords = 0;
 
     std::vector<String> messages;
+    messages.push_back("Clients: " + String(newNumClients));
+    messages.push_back("Passwords: " + String(newNumPasswords));
     messages.push_back("SSID: " + clonedSSID);
     messages.push_back("Portal: " + String(isCaptivePortalOn ? "On" : "Off"));
     messages.push_back("Page: " + selectedPortalFile.substring(7));
     messages.push_back("Bluetooth: " + String(bluetoothEnabled ? "On" : "Off"));
-    ui.writeVectorMessage(messages, 10, 90);
+    ui.writeVectorMessage(messages, 10, 30);
 
-    M5.Display.setCursor(10, 30);
-    M5.Display.println("Clients: " + String(newNumClients));
     oldNumClients = newNumClients;
-
-    M5.Display.setCursor(10, 60);
-    M5.Display.println("Passwords: " + String(newNumPasswords));
     oldNumPasswords = newNumPasswords;
 }
 

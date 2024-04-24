@@ -558,16 +558,6 @@ void scanWifiNetworks(CallbackMenuItem& menuItem) {
 }
 
 
-File openFile(String filename, const char* mode = FILE_READ) {
-    File file = SD.open(filename, mode);
-    if (!file) {
-        sendMessage("Error opening " + filename);
-        return File();
-    }
-    return file;
-}
-
-
 void showMonitorStatus(CallbackMenuItem& menuItem) {
     monitor.showMonitorPage();
 
@@ -576,6 +566,7 @@ void showMonitorStatus(CallbackMenuItem& menuItem) {
     } else if (M5.BtnB.wasReleased()) {
         monitor.prevPage();
     } else if (M5.BtnC.wasReleased()) {
+        monitor.resetMonitorPage();
         menuItem.deactivateCallbacks();
     }
 }
@@ -837,6 +828,17 @@ void checkSerialCommands(String command, bool fromBluetooth) {
     }
 }
 
+
+void selectNetwork(int index) {
+    if (index >= 0 && index < numSsid) {
+        currentlySelectedSSID = ssidList[index];
+        sendMessage("SSID selection: " + currentlySelectedSSID);
+    } else {
+        sendMessage("SSID index invalid.");
+    }
+}
+
+
 void sendMessage(String message) {
     // Send Message over serial/BLE
     Serial.println(message);
@@ -845,7 +847,7 @@ void sendMessage(String message) {
 
 
 void checkCredentialsSerial() {
-    File file = openFile("/credentials.txt");
+    File file = openFile("/credentials.txt", FILE_READ);
 
     bool isEmpty = true;
     sendMessage("----------------------");
@@ -865,7 +867,7 @@ void checkCredentialsSerial() {
 }
 
 void changePortal(int index) {
-    File root = openFile("/sites");
+    File root = openFile("/sites", FILE_READ);
 
     int currentIndex = 0;
     String selectedFile;
@@ -883,15 +885,6 @@ void changePortal(int index) {
         selectedPortalFile = "/sites/" + selectedFile;
     } else {
         sendMessage("Invalid portal index");
-    }
-}
-
-void selectNetwork(int index) {
-    if (index >= 0 && index < numSsid) {
-        currentlySelectedSSID = ssidList[index];
-        sendMessage("SSID selection: " + currentlySelectedSSID);
-    } else {
-        sendMessage("SSID index invalid.");
     }
 }
 
@@ -1105,7 +1098,7 @@ void createCaptivePortal(CallbackMenuItem& menuItem) {
     server.on("/credentials", HTTP_GET, []() {
         String password = server.arg("pass");
         if (password == accessWebPassword) {
-            File file = openFile("/credentials.txt");
+            File file = openFile("/credentials.txt", FILE_READ);
 
             if (file) {
                 if (file.size() == 0) {
@@ -1273,7 +1266,7 @@ void handleSdCardBrowse() {
     String dirPath = server.arg("dir");
     if (dirPath == "") dirPath = "/";
 
-    File dir = openFile(dirPath);
+    File dir = openFile(dirPath, FILE_READ);
     if (!dir || !dir.isDirectory()) {
         server.send(404, "text/html", "<html><body><p>Directory not found.</p><script>setTimeout(function(){window.history.back();}, 2000);</script></body></html>");
         return;
@@ -1435,7 +1428,7 @@ void handleFileDelete() {
 }
 
 void servePortalFile(const String& filename) {
-    File webFile = openFile(filename);
+    File webFile = openFile(filename, FILE_READ);
     if (webFile) {
         server.streamFile(webFile, "text/html");
         /*sendMessage("-------------------");
@@ -1484,7 +1477,7 @@ void stopCaptivePortal(CallbackMenuItem& menuItem) {
 }
 
 void listPortalFiles(CallbackMenuItem& menuItem) {
-    File root = openFile("/sites");
+    File root = openFile("/sites", FILE_READ);
 
     numPortalFiles = 0;
     sendMessage("Available portals:");
@@ -1600,7 +1593,7 @@ String credentialsList[100]; // max 100 lignes parsed
 int numCredentials = 0;
 
 void readCredentialsFromFile() {
-    File file = openFile("/credentials.txt");
+    File file = openFile("/credentials.txt", FILE_READ);
 
     if (file) {
         numCredentials = 0;
@@ -1718,7 +1711,7 @@ void deleteCredentials(CallbackMenuItem& menuItem) {
 
 
 int countPasswordsInFile() {
-    File file = openFile("/credentials.txt");
+    File file = openFile("/credentials.txt", FILE_READ);
 
     int passwordCount = 0;
     while (file.available()) {
@@ -3007,7 +3000,7 @@ void wardrivingMode() {
         SD.mkdir("/wardriving");
     }
 
-    File root = openFile("/wardriving");
+    File root = openFile("/wardriving", FILE_READ);
     int maxIndex = 0;
     while (true) {
         File entry = root.openNextFile();
