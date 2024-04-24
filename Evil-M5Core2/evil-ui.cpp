@@ -33,6 +33,7 @@
 #include "evil-ui.h"
 
 EvilUI::EvilUI() {
+    previousMillis = 0;
 }
 
 void EvilUI::init() {
@@ -50,9 +51,6 @@ void EvilUI::writeSingleMessage(String message, bool clearScreen = false) {
     }
     M5.Display.setTextSize(2);
     M5.Display.setTextColor(TFT_BLACK);
-    //M5.Display.setCursor(50 , M5.Display.height()/ 2 );
-    //M5.Display.print(message);
-    //M5.Display.display();
     M5.Display.setTextDatum(MC_DATUM);
     M5.Display.drawString(message, M5.Display.width() / 2, M5.Display.height() / 2);
 }
@@ -145,4 +143,14 @@ bool EvilUI::getInMenu() {
 
 void EvilUI::setInMenu(bool val) {
     inMenu = val;
+}
+
+bool EvilUI::clearScreenDelay() {
+    unsigned long currentMillis = millis();
+    if (currentMillis - previousMillis >= 500) {
+            previousMillis = currentMillis;
+            M5.Display.fillRect(0, 0, M5.Display.width(), 200, TFT_LIGHTGREY);
+            return true;
+    }
+    return false;
 }

@@ -48,6 +48,7 @@ class EvilUI {
     void writeVectorMessage(std::vector<String> messages, int x, int y);
     bool confirmPopup(String message);
     void aboutScreen(String message);
+    bool clearScreenDelay();
     // TODO: Remove old Menu functions
     void waitAndReturnToMenu(String message);
     void resetMenuDraw();
@@ -59,6 +60,7 @@ class EvilUI {
     bool inMenu;
     int maxMenuDisplay;
     bool isOperationInProgress;
+    unsigned long previousMillis;
 };
 
 #endif

@@ -45,7 +45,6 @@ class EvilMonitor {
     EvilMonitor();
     void init();
     static void emptyMonitorCallback(CallbackMenuItem& menuItem);
-    void clearMenuTextArea();
     void showMonitorPage();
     void nextPage();
     void prevPage();

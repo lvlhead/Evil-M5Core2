@@ -59,22 +59,22 @@ void EvilMonitor::emptyMonitorCallback(CallbackMenuItem& menuItem) {
     menuItem.getMenu()->displaySoftKey(BtnCSlot, "Esc");
 }
 
-void EvilMonitor::clearMenuTextArea() {
-    // TODO: Move this to the EvilUI class
-    M5.Display.fillRect(0, 0, M5.Display.width(), 200, TFT_LIGHTGREY);
-}
-
 void EvilMonitor::showMonitorPage() {
-    switch (monitorPage) {
-        case 1:
-            Page1();
-            break;
-        case 2:
-            Page2();
-            break;
-        case 3:
-            Page3();
-            break;
+    // Display the monitor pages only after the screen has cleared
+    // TODO: This logic makes the screen blink and causes a slight delay
+    //       of screen redraw.
+    if (ui.clearScreenDelay()) {
+        switch (monitorPage) {
+            case 1:
+                Page1();
+                break;
+            case 2:
+                Page2();
+                break;
+            case 3:
+                Page3();
+                break;
+        }
     }
 }
 
@@ -107,10 +107,6 @@ void EvilMonitor::Page1() {
     //int newNumPasswords = countPasswordsInFile();
     int newNumPasswords = 0;
 
-    if (newNumClients != oldNumClients || newNumPasswords != oldNumPasswords) {
-        clearMenuTextArea();
-    }
-
     std::vector<String> messages;
     messages.push_back("SSID: " + clonedSSID);
     messages.push_back("Portal: " + String(isCaptivePortalOn ? "On" : "Off"));
@@ -139,29 +135,18 @@ void EvilMonitor::Page2() {
             //if (y > M5.Display.height() - 20) break;
             messages.push_back(macAddresses[i]);
         }
-        clearMenuTextArea();
         ui.writeVectorMessage(messages, 10, 50);
     }
 }
 
 void EvilMonitor::Page3() {
     //Serial.println("EvilMonitor::Page3");
-    oldStack = getStack();
-    oldRamUsage = getRamUsage();
-    oldBatteryLevel = getBatteryLevel();
-    String newTemperature = getTemperature();
-
-    if (newTemperature != oldTemperature) {
-        clearMenuTextArea();
-    }
-
     std::vector<String> messages;
-    messages.push_back("Stack left: " + oldStack + " Kb");
-    messages.push_back("RAM: " + oldRamUsage + " Mo");
-    messages.push_back("Battery: " + oldBatteryLevel + "%");
-    messages.push_back("Temperature: " + oldTemperature + "C");
+    messages.push_back("Stack left: " + getStack() + " Kb");
+    messages.push_back("RAM: " + getRamUsage() + " Mo");
+    messages.push_back("Battery: " + getBatteryLevel() + "%");
+    messages.push_back("Temperature: " + getTemperature() + "C");
     ui.writeVectorMessage(messages, 10, 30);
-    oldTemperature = newTemperature;
 }
 
 String EvilMonitor::getMonitoringStatus() {
