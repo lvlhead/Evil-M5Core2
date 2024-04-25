@@ -48,21 +48,18 @@ void EvilBeacon::init() {
 
 void EvilBeacon::emptyBeaconCallback(CallbackMenuItem& menuItem) {
     M5.Display.clear();
-    //menuItem.getMenu()->displaySoftKey(BtnASlot, "Next");
     menuItem.getMenu()->displaySoftKey(BtnBSlot, "Stop");
-    //menuItem.getMenu()->displaySoftKey(BtnCSlot, "Esc");
 }
 
 void EvilBeacon::showBeaconApp() {
     // Set up application for first run
     if (!isAppRunning) {
         init();
-        //Serial.println("EvilBeacon::showBeaconApp set WiFi.mode");
         WiFi.mode(WIFI_MODE_AP);
 
-        // Demander à l'utilisateur s'il souhaite utiliser des beacons personnalisés
+        // Ask the user if they want to use custom beacons
         if (ui.confirmPopup("Use custom beacons?", false)) {
-            customBeacons = readCustomBeacons("/config/config.txt"); // Remplacer par le chemin réel
+            customBeacons = readCustomBeacons("/config/config.txt"); // Replace with the actual path
         }
 
         sendUtilMessage("-------------------");
@@ -78,6 +75,7 @@ void EvilBeacon::showBeaconApp() {
 }
 
 void EvilBeacon::closeBeaconApp() {
+    toggleAppRunning();
     sendUtilMessage("-------------------");
     sendUtilMessage("Stopping beacon Spam");
     sendUtilMessage("-------------------");
@@ -95,14 +93,14 @@ void EvilBeacon::beaconAttack() {
     messages.push_back("Beacon sent:");
     ui.writeVectorMessage(messages, 10, 50, 20);
 
-    // Générer un nouveau SSID pour le beacon
+    // Generate a new SSID for the beacon
     if (!customBeacons.empty()) {
-        ssid = customBeacons[beaconCount % customBeacons.size()]; // Utiliser un beacon personnalisé
+        ssid = customBeacons[beaconCount % customBeacons.size()]; // Use a custom beacon
     } else {
-        ssid = wireless.generateRandomSSID(32); // Utiliser un beacon aléatoire
+        ssid = wireless.generateRandomSSID(32); // Use a random beacon
     }
 
-    // Effacer la zone d'affichage précédente de l'SSID
+    // Clear the previous SSID display area
     M5.Display.setTextSize(1.5);
     ui.writeMessageXY(ssid, 5, 90, false);
 
@@ -135,7 +133,7 @@ std::vector<String> EvilBeacon::readCustomBeacons(const char* filename) {
                 beaconsStr = beaconsStr.substring(idx + 1);
             }
             if (beaconsStr.length() > 0) {
-                customBeacons.push_back(beaconsStr); // Ajouter le dernier élément
+                customBeacons.push_back(beaconsStr); // Add the last element
             }
             break;
         }

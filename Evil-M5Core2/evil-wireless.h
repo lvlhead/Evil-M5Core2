@@ -33,9 +33,11 @@
 #ifndef EVILWIRELESS_H
 #define EVILWIRELESS_H
 
+#include <M5StackMenuSystem.h>
 #include <WiFi.h>
 #include "BluetoothSerial.h"
 
+#include "evil-ui.h"
 #include "evil-util.h"
 
 class EvilWireless {
@@ -52,11 +54,22 @@ class EvilWireless {
     void setRandomMAC_STA();
     String generateRandomMAC();
     String getWifiSecurity(int networkIndex);
+    void onOffBleSerial();
+    void setBluetoothEnabled(bool enabled);
+    bool getBluetoothEnabled();
+    void setClonedSSID(String ssid);
+    String getClonedSSID();
+    void firstScanWifiNetworks();
+    int getNumSSID();
   private:
     int currentChannel;
     int originalChannel;
+    String clonedSSID;
+    bool bluetoothEnabled;
     uint8_t originalMAC[6];
     void restoreOriginalMAC();
+    int scanAvailableSSID();
+    int numSsid;
 };
 
 #endif

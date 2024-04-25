@@ -97,20 +97,16 @@ void EvilMonitor::prevPage() {
 
 void EvilMonitor::Page1() {
     //Serial.println("EvilMonitor::Page1");
-    oldNumClients = -1;
-    oldNumPasswords = -1;
-
     int newNumClients = WiFi.softAPgetStationNum();
-    //int newNumPasswords = countPasswordsInFile();
-    int newNumPasswords = 0;
+    int newNumPasswords = countPasswordsInFile();
 
     std::vector<String> messages;
     messages.push_back("Clients: " + String(newNumClients));
     messages.push_back("Passwords: " + String(newNumPasswords));
-    messages.push_back("SSID: " + clonedSSID);
+    messages.push_back("SSID: " + wireless.getClonedSSID());
     messages.push_back("Portal: " + String(isCaptivePortalOn ? "On" : "Off"));
     messages.push_back("Page: " + selectedPortalFile.substring(7));
-    messages.push_back("Bluetooth: " + String(bluetoothEnabled ? "On" : "Off"));
+    messages.push_back("Bluetooth: " + String(wireless.getBluetoothEnabled() ? "On" : "Off"));
     ui.writeVectorMessage(messages, 10, 30, 30);
 
     oldNumClients = newNumClients;
@@ -151,10 +147,10 @@ String EvilMonitor::getMonitoringStatus() {
 
     status += "Clients: " + String(numClientsConnected) + "\n";
     status += "Credentials: " + String(numCredentials) + "\n";
-    status += "SSID: " + String(clonedSSID) + "\n";
+    status += "SSID: " + wireless.getClonedSSID() + "\n";
     status += "Portal: " + String(isCaptivePortalOn ? "On" : "Off") + "\n";
     status += "Page: " + String(selectedPortalFile.substring(7)) + "\n";
-    status += "Bluetooth: " + String(bluetoothEnabled ? "ON" : "OFF") + "\n";
+    status += "Bluetooth: " + String(wireless.getBluetoothEnabled() ? "ON" : "OFF") + "\n";
     updateConnectedMACs();
     status += "Connected MACs:\n";
     for (int i = 0; i < 10; i++) {
@@ -205,4 +201,19 @@ String EvilMonitor::getRamUsage() {
     char buffer[10];
     sprintf(buffer, "%.2f", heapSizeInMegabytes);
     return String(buffer);
+}
+
+int EvilMonitor::countPasswordsInFile() {
+    File file = openFile("/credentials.txt", FILE_READ);
+
+    int passwordCount = 0;
+    while (file.available()) {
+        String line = file.readStringUntil('\n');
+        if (line.startsWith("-- Password --")) {
+            passwordCount++;
+        }
+    }
+
+    file.close();
+    return passwordCount;
 }

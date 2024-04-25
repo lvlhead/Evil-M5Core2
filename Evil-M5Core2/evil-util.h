@@ -37,14 +37,16 @@
 #include <M5Unified.h>
 #include <WiFi.h>
 
+#include "evil-wireless.h"
+
 #define APP_VERSION "1.2.0 2024"
+#define BLUETOOTH_NAME "E7vhi3l0tMh53Cro0rne32"
 
 File openFile(String filename, const char* mode);
 void sendUtilMessage(String message);
 
-extern String clonedSSID;
 extern bool isCaptivePortalOn;
-extern bool bluetoothEnabled;
 extern String selectedPortalFile;
+extern String ssidList[100];
 
 #endif

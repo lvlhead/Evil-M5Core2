@@ -56,10 +56,12 @@ class EvilMonitor {
     String getBatteryLevel();
   private:
     EvilUI ui;
+    EvilWireless wireless;
     int monitorPage;
     String getTemperature();
     String getStack();
     String getRamUsage();
+    int countPasswordsInFile();
     int oldNumClients;
     int oldNumPasswords;
     String macAddresses[10];

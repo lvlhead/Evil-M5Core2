@@ -48,6 +48,7 @@ File openFile(String filename, const char* mode = FILE_READ) {
 
 void sendUtilMessage(String message) {
     // Send Message over serial/BLE
+    EvilWireless wireless;
     Serial.println(message);
-    //wireless.ESP_BT.print(message + "\n");
+    wireless.ESP_BT.print(message + "\n");
 }

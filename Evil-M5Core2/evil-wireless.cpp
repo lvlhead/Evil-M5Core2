@@ -40,6 +40,10 @@ extern "C" {
 EvilWireless::EvilWireless() {
     currentChannel = 1;
     originalChannel = 1;
+    numSsid = 0;
+    clonedSSID = "Evil-M5Core2";
+    isCaptivePortalOn = false;
+    bluetoothEnabled = false;
 }
 
 String EvilWireless::generateRandomSSID(int length) {
@@ -93,7 +97,7 @@ void EvilWireless::restoreOriginalWiFiSettings() {
     esp_wifi_stop();
     esp_wifi_set_promiscuous_rx_cb(NULL);
     esp_wifi_deinit();
-    delay(300); // Petite pause pour s'assurer que tout est terminé
+    delay(300); // Short break to make sure everything is finished
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     esp_wifi_init(&cfg);
     esp_wifi_start();
@@ -165,5 +169,78 @@ String EvilWireless::getWifiSecurity(int networkIndex) {
             return "WPA2_ENTERPRISE";
         default:
             return "Unknown";
+    }
+}
+
+void EvilWireless::onOffBleSerial() {
+    if (bluetoothEnabled) {
+        ESP_BT.end();
+    } else {
+        WiFi.mode(WIFI_OFF);
+        WiFi.disconnect(true);
+        delay(500);
+        esp_wifi_set_promiscuous(false);
+        esp_wifi_stop();
+        esp_wifi_deinit();
+        ESP_BT.begin(BLUETOOTH_NAME);
+        ESP_BT.setPin("730303"); // NOT WORKING // WORK ONLY WITH esp v1.0.1 // workaround password in serial
+    }
+    bluetoothEnabled = !bluetoothEnabled;
+}
+
+void EvilWireless::setBluetoothEnabled(bool enabled) {
+    bluetoothEnabled = enabled;
+}
+
+bool EvilWireless::getBluetoothEnabled() {
+    return bluetoothEnabled;
+}
+
+void EvilWireless::setClonedSSID(String ssid) {
+    clonedSSID = ssid;
+}
+
+String EvilWireless::getClonedSSID() {
+    return clonedSSID;
+}
+
+int EvilWireless::getNumSSID() {
+    return numSsid;
+}
+
+int EvilWireless::scanAvailableSSID() {
+    // Scan for Wifi networks, store all found SSID to ssidList and
+    // return number of SSID found.
+    WiFi.mode(WIFI_STA);
+    WiFi.disconnect();
+    unsigned long startTime = millis();
+    int n;
+
+    while (millis() - startTime < 2000) {
+        n = WiFi.scanNetworks();
+        if (n != WIFI_SCAN_RUNNING) break;
+    }
+
+    numSsid = min(n, 100);
+    for (int i = 0; i < numSsid; i++) {
+        ssidList[i] = WiFi.SSID(i);
+    }
+
+    return n;
+}
+
+void EvilWireless::firstScanWifiNetworks() {
+    // Run first scan of available SSID and output
+    int n = scanAvailableSSID();
+
+    if (n == 0) {
+        sendUtilMessage("No network found ...");
+    } else {
+        sendUtilMessage(" Near Wifi Networks : ");
+        sendUtilMessage("-------------------");
+        for (int i = 0; i < numSsid; i++) {
+            sendUtilMessage(String(i) + ": " + ssidList[i]);
+        }
+        sendUtilMessage("-------------------");
     }
 }
