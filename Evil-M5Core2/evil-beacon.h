@@ -33,8 +33,8 @@
 #ifndef EVILBEACON_H
 #define EVILBEACON_H
 
-#include <M5Unified.h>
 #include <M5StackMenuSystem.h>
+#include <M5Unified.h>
 #include <WiFi.h>
 
 #include "evil-ui.h"

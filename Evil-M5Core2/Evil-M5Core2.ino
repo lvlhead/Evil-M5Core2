@@ -53,8 +53,8 @@
 #include <WebServer.h>
 #include <DNSServer.h>
 #include <SD.h>
-#include <M5Unified.h>
 #include <M5StackMenuSystem.h>
+#include <M5Unified.h>
 #include <TinyGPS++.h>
 #include <ArduinoJson.h>
 #include "BLEDevice.h"
@@ -464,7 +464,8 @@ void setup() {
     subMenuSettings.addMenuItem("Delete All Credentials", deleteCredentials);
     subMenuSettings.addMenuItem("Delete All Probes", deleteAllProbes);
 
-    //customizeLayout(mainMenu.getLayout());
+    customizeLayout(mainMenu.getLayout());
+    customizeLayout(subMenuSettings.getLayout());
 
     // TODO: Remove random initialization of global variables
     currentClonedSSID = "Evil-M5Core2";
@@ -476,6 +477,9 @@ void setup() {
 
 
 void customizeLayout(Layout& layout) {
+    layout.SCREEN_WIDTH = M5.Display.width();
+    layout.SCREEN_HEIGHT = M5.Display.height();
+/*
     // smaller font
     layout.MENU_FONT_SIZE = 1;
 
@@ -492,6 +496,7 @@ void customizeLayout(Layout& layout) {
     layout.BOTTOM_BAR_BACKGROUND_COLOR = DARKGREY;
     layout.BOTTOM_BAR_SOFTKEY_COLOR = WHITE;
     layout.BOTTOM_BAR_SOFTKEY_BACKGROUND_COLOR = DARKGREY;
+*/
 }
 
 

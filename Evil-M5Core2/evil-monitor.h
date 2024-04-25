@@ -33,8 +33,8 @@
 #ifndef EVILMONITOR_H
 #define EVILMONITOR_H
 
-#include <M5Unified.h>
 #include <M5StackMenuSystem.h>
+#include <M5Unified.h>
 #include <WiFi.h>
 
 #include "evil-ui.h"
