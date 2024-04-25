@@ -1471,7 +1471,7 @@ void stopCaptivePortal(CallbackMenuItem& menuItem) {
 #if LED_ENABLED
     led.pattern4();
 #endif
-    ui.waitAndReturnToMenu("  Portal Stopped");
+    ui.waitAndReturnToMenu("Portal Stopped");
 }
 
 void listPortalFiles(CallbackMenuItem& menuItem) {
@@ -1723,8 +1723,7 @@ void packetSnifferKarma(void* buf, wifi_promiscuous_pkt_type_t type) {
     const uint8_t frame_type = frame[0];
 
     if (ssid_count_Karma == 0) {
-        M5.Display.setCursor(50, M5.Display.height() / 2 - 20);
-        M5.Display.println("Waiting for probe...");
+        ui.writeSingleMessage("Waiting for probe...", false);
     }
 
     if (frame_type == 0x40) { // Probe Request Frame
@@ -2407,13 +2406,11 @@ void probeAttack() {
     M5.Display.setTextColor(TFT_WHITE);
     M5.Display.println("Stop");
 
-    int probesTextX = 10;
-    String probesText = "Probe Attack running...";
-    M5.Display.setCursor(probesTextX, 50);
-    M5.Display.println(probesText);
-    probesText = "Probes sent: ";
-    M5.Display.setCursor(probesTextX, 70);
-    M5.Display.print(probesText);
+    std::vector<String> messages;
+    messages.push_back("Probe Attack running...");
+    messages.push_back("Probes sent: ");
+    ui.writeVectorMessage(messages, 10, 50, 20);
+
     sendMessage("-------------------");
     sendMessage("Starting Probe Attack");
     sendMessage("-------------------");
@@ -2973,8 +2970,8 @@ void createKarmaList(int maxIndex) {
 
     while (file.available()) {
         String line = file.readStringUntil('\n');
-        if (isNetworkOpen(line)) {
-            String ssid = extractSSID(line);
+        if (wireless.isNetworkOpen(line)) {
+            String ssid = wireless.extractSSID(line);
             uniqueSSIDs.insert(ssid.c_str());
         }
     }
@@ -2988,31 +2985,6 @@ void createKarmaList(int maxIndex) {
         karmaListWrite.println(ssid.c_str());
         sendMessage("Writing SSID: " + String(ssid.c_str()));
     }
-}
-
-bool isNetworkOpen(const String& line) {
-    int securityTypeStart = nthIndexOf(line, ',', 1) + 1;
-    int securityTypeEnd = nthIndexOf(line, ',', 2);
-    String securityType = line.substring(securityTypeStart, securityTypeEnd);
-    return securityType.indexOf("[OPEN][ESS]") != -1;
-}
-
-String extractSSID(const String& line) {
-    int ssidStart = nthIndexOf(line, ',', 0) + 1;
-    int ssidEnd = nthIndexOf(line, ',', 1);
-    String ssid = line.substring(ssidStart, ssidEnd);
-    return ssid;
-}
-
-int nthIndexOf(const String& str, char toFind, int nth) {
-    int found = 0;
-    int index = -1;
-    while (found <= nth && index < (int) str.length()) {
-        index = str.indexOf(toFind, index + 1);
-        if (index == -1) break;
-        found++;
-    }
-    return index;
 }
 
 void returnToMenu() {
@@ -3056,7 +3028,7 @@ void karmaSpear() {
         if (M5.BtnA.isPressed()) { // Vérifie régulièrement si btnA est pressé
             karmaListFile.close();
             isAutoKarmaActive = false;
-            ui.waitAndReturnToMenu(" Karma Spear Stopped.");
+            ui.waitAndReturnToMenu("Karma Spear Stopped.");
             return;
         }
 
@@ -3084,7 +3056,7 @@ void karmaSpear() {
     karmaListFile.close();
     isAutoKarmaActive = false;
     sendMessage("Karma Spear Failed...");
-    ui.waitAndReturnToMenu(" Karma Spear Failed...");
+    ui.waitAndReturnToMenu("Karma Spear Failed...");
 }
 
 
@@ -3437,11 +3409,7 @@ void initializeBLEIfNeeded() {
 
 void wallOfFlipper(){
     bool btnBPressed = false; //debounce
-    M5.Display.fillScreen(BLACK);
-    M5.Display.setCursor(0, 10);
-    M5.Display.setTextSize(2);
-    M5.Display.setTextColor(WHITE);
-    M5.Display.println("Waiting for Flipper");
+    ui.writeMessageXY("Waiting for Flipper", 0, 10, false);
 
     M5.Lcd.setCursor(140, 220);
     M5.Lcd.println("Stop");
@@ -3458,11 +3426,7 @@ void wallOfFlipper(){
             }
         }
         if (millis() - lastFlipperFoundMillis > 10000) { // 30000 millisecondes = 30 secondes
-            M5.Display.fillScreen(BLACK);
-            M5.Display.setCursor(0, 10);
-            M5.Display.setTextSize(2);
-            M5.Display.setTextColor(WHITE);
-            M5.Display.println("Waiting for Flipper");
+            ui.writeMessageXY("Waiting for Flipper", 0, 10, false);
             M5.Lcd.setCursor(140, 220);
             M5.Lcd.println("Stop");
 

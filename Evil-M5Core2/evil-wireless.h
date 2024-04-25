@@ -56,12 +56,15 @@ class EvilWireless {
     void onOffBleSerial();
     void firstScanWifiNetworks();
     int getNumSSID();
+    bool isNetworkOpen(const String& line);
+    String extractSSID(const String& line);
   private:
     int currentChannel;
     int originalChannel;
     uint8_t originalMAC[6];
     void restoreOriginalMAC();
     int scanAvailableSSID();
+    void nthIndexOf(const String& str, char toFind, int nth);
     int numSsid;
 };
 

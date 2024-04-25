@@ -218,3 +218,28 @@ void EvilWireless::firstScanWifiNetworks() {
         sendMessage("-------------------");
     }
 }
+
+bool EvilWireless::isNetworkOpen(const String& line) {
+    int securityTypeStart = nthIndexOf(line, ',', 1) + 1;
+    int securityTypeEnd = nthIndexOf(line, ',', 2);
+    String securityType = line.substring(securityTypeStart, securityTypeEnd);
+    return securityType.indexOf("[OPEN][ESS]") != -1;
+}
+
+String EvilWireless::extractSSID(const String& line) {
+    int ssidStart = nthIndexOf(line, ',', 0) + 1;
+    int ssidEnd = nthIndexOf(line, ',', 1);
+    String ssid = line.substring(ssidStart, ssidEnd);
+    return ssid;
+}
+
+int EvilWireless::nthIndexOf(const String& str, char toFind, int nth) {
+    int found = 0;
+    int index = -1;
+    while (found <= nth && index < (int) str.length()) {
+        index = str.indexOf(toFind, index + 1);
+        if (index == -1) break;
+        found++;
+    }
+    return index;
+}
