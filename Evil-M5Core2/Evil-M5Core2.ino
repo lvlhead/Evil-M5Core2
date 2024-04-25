@@ -2406,9 +2406,11 @@ void probeAttack() {
     M5.Display.setTextColor(TFT_WHITE);
     M5.Display.println("Stop");
 
+    int probesTextX = 10;
     std::vector<String> messages;
     messages.push_back("Probe Attack running...");
     messages.push_back("Probes sent: ");
+    String probesText = "Probes sent: ";
     ui.writeVectorMessage(messages, 10, 50, 20);
 
     sendMessage("-------------------");

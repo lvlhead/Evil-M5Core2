@@ -64,7 +64,7 @@ class EvilWireless {
     uint8_t originalMAC[6];
     void restoreOriginalMAC();
     int scanAvailableSSID();
-    void nthIndexOf(const String& str, char toFind, int nth);
+    int nthIndexOf(const String& str, char toFind, int nth);
     int numSsid;
 };
 
