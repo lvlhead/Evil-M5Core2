@@ -30,21 +30,33 @@
     regarding network testing and ethical hacking.
 */
 
-#ifndef EVILUTIL_H
-#define EVILUTIL_H
+#ifndef EVILWIRELESS_H
+#define EVILWIRELESS_H
 
-#include <SD.h>
-#include <M5Unified.h>
 #include <WiFi.h>
+#include "BluetoothSerial.h"
 
-#define APP_VERSION "1.2.0 2024"
+#include "evil-util.h"
 
-File openFile(String filename, const char* mode);
-void sendUtilMessage(String message);
-
-extern String clonedSSID;
-extern bool isCaptivePortalOn;
-extern bool bluetoothEnabled;
-extern String selectedPortalFile;
+class EvilWireless {
+  public:
+    EvilWireless();
+    BluetoothSerial ESP_BT;
+    String generateRandomSSID(int length);
+    void restoreOriginalWiFiSettings();
+    void setRandomMAC_APKarma();
+    String generateRandomMACKarma();
+    void saveOriginalMAC();
+    String getMACAddress();
+    void setNextWiFiChannel();
+    void setRandomMAC_STA();
+    String generateRandomMAC();
+    String getWifiSecurity(int networkIndex);
+  private:
+    int currentChannel;
+    int originalChannel;
+    uint8_t originalMAC[6];
+    void restoreOriginalMAC();
+};
 
 #endif

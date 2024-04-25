@@ -30,21 +30,34 @@
     regarding network testing and ethical hacking.
 */
 
-#ifndef EVILUTIL_H
-#define EVILUTIL_H
+#ifndef EVILBEACON_H
+#define EVILBEACON_H
 
-#include <SD.h>
 #include <M5Unified.h>
+#include <M5StackMenuSystem.h>
 #include <WiFi.h>
 
-#define APP_VERSION "1.2.0 2024"
+#include "evil-ui.h"
+#include "evil-wireless.h"
 
-File openFile(String filename, const char* mode);
-void sendUtilMessage(String message);
+class EvilBeacon {
+  public:
+    EvilBeacon();
+    void init();
+    void showBeaconApp();
+    void closeBeaconApp();
+    static void emptyBeaconCallback(CallbackMenuItem& menuItem);
+    void beaconAttack();
+    void toggleAppRunning();
 
-extern String clonedSSID;
-extern bool isCaptivePortalOn;
-extern bool bluetoothEnabled;
-extern String selectedPortalFile;
+  private:
+    EvilUI ui;
+    EvilWireless wireless;
+    bool isAppRunning;
+    int beaconCount;
+    String ssid;
+    std::vector<String> readCustomBeacons(const char* filename);
+    std::vector<String> customBeacons;
+};
 
 #endif

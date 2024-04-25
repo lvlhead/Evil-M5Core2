@@ -30,6 +30,11 @@
     regarding network testing and ethical hacking.
 */
 
+extern "C" {
+    #include "esp_wifi.h"
+    #include "esp_system.h"
+}
+
 #include "evil-util.h"
 
 File openFile(String filename, const char* mode = FILE_READ) {
@@ -44,5 +49,5 @@ File openFile(String filename, const char* mode = FILE_READ) {
 void sendUtilMessage(String message) {
     // Send Message over serial/BLE
     Serial.println(message);
-    //ESP_BT.print(message + "\n");
+    //wireless.ESP_BT.print(message + "\n");
 }

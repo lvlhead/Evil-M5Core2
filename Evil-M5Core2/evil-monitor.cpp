@@ -111,7 +111,7 @@ void EvilMonitor::Page1() {
     messages.push_back("Portal: " + String(isCaptivePortalOn ? "On" : "Off"));
     messages.push_back("Page: " + selectedPortalFile.substring(7));
     messages.push_back("Bluetooth: " + String(bluetoothEnabled ? "On" : "Off"));
-    ui.writeVectorMessage(messages, 10, 30);
+    ui.writeVectorMessage(messages, 10, 30, 30);
 
     oldNumClients = newNumClients;
     oldNumPasswords = newNumPasswords;
@@ -129,7 +129,7 @@ void EvilMonitor::Page2() {
             //if (y > M5.Display.height() - 20) break;
             messages.push_back(macAddresses[i]);
         }
-        ui.writeVectorMessage(messages, 10, 50);
+        ui.writeVectorMessage(messages, 10, 50, 30);
     }
 }
 
@@ -140,7 +140,7 @@ void EvilMonitor::Page3() {
     messages.push_back("RAM: " + getRamUsage() + " Mo");
     messages.push_back("Battery: " + getBatteryLevel() + "%");
     messages.push_back("Temperature: " + getTemperature() + "C");
-    ui.writeVectorMessage(messages, 10, 30);
+    ui.writeVectorMessage(messages, 10, 30, 30);
 }
 
 String EvilMonitor::getMonitoringStatus() {

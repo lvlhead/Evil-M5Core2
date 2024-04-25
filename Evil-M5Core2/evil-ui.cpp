@@ -106,14 +106,11 @@ void EvilUI::waitAndReturnToMenu(String message) {
     setInMenu(true);
 }
 
-bool EvilUI::confirmPopup(String message) {
+bool EvilUI::confirmPopup(String message, bool clearScreen) {
     bool confirm = false;
     bool decisionMade = false;
 
-    M5.Display.clear();
-    M5.Display.setCursor(50, M5.Display.height()/2);
-    M5.Display.setTextColor(TFT_WHITE);
-    M5.Display.println(message);
+    writeSingleMessage(message, clearScreen);
     M5.Display.setCursor(37, 220);
     M5.Display.setTextColor(TFT_GREEN);
     M5.Display.println("Yes");

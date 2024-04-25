@@ -60,9 +60,6 @@
 #include <ArduinoJson.h>
 #include "BLEDevice.h"
 
-#include "BluetoothSerial.h"
-BluetoothSerial ESP_BT;
-
 extern "C" {
     #include "esp_wifi.h"
     #include "esp_system.h"
@@ -72,14 +69,18 @@ extern "C" {
 #include "evil-config.h"
 #include "evil-led.h"
 #include "evil-ui.h"
+#include "evil-beacon.h"
 #include "evil-monitor.h"
 #include "evil-util.h"
+#include "evil-wireless.h"
 
 // Initialize modules
 EvilConfig config;
 EvilLED led;
 EvilUI ui;
+EvilBeacon beacon;
 EvilMonitor monitor;
+EvilWireless wireless;
 TinyGPSPlus gps;
 
 // Set up Menu objects
@@ -204,16 +205,16 @@ void setup() {
     int GPS_TX_PIN;
     switch (M5.getBoard()) {
         case m5::board_t::board_M5StackCore2:
-            // Configuration pour Core2
+            // Configuration for Core2
             GPS_RX_PIN = 13;
             GPS_TX_PIN = 14;
-            Serial.println("M5Core2 Board detected.");
+            Serial.println("M5Stack Core2 Board detected.");
             break;
         case m5::board_t::board_M5Stack: // Présumé ici comme étant le modèle Fire
-            // Configuration pour Fire
-            GPS_RX_PIN = 21;
-            GPS_TX_PIN = 22;
-            Serial.println("M5Fire Board detected.");
+            // Configuration for Fire
+            GPS_RX_PIN = 16;
+            GPS_TX_PIN = 17;
+            Serial.println("M5Stack BASIC/GRAY GO/FIRE FACES II Board detected.");
             break;
         default:
             // Modèle non pris en charge ou inconnu, éventuellement définir des valeurs par défaut
@@ -412,6 +413,7 @@ void setup() {
     sendMessage("-------------------");
 
     // Scan for local Wifi networks
+    wireless.saveOriginalMAC();
     firstScanWifiNetworks();
 #if LED_ENABLED
     led.pattern2();
@@ -453,6 +455,7 @@ void setup() {
     mainMenu.addMenuItem("Start Captive Portal", createCaptivePortal);
     mainMenu.addMenuItem("Stop Captive Portal", stopCaptivePortal);
     mainMenu.addMenuItem("Change Portal", stopCaptivePortal);
+    mainMenu.addMenuItem("Beacon Spam", beacon.emptyBeaconCallback, showBeaconAttack);
     mainMenu.addSubMenu("Settings", &subMenuSettings);
 
     // Define Settings Menu
@@ -571,6 +574,20 @@ void showMonitorStatus(CallbackMenuItem& menuItem) {
     }
 }
 
+void showBeaconAttack(CallbackMenuItem& menuItem) {
+    beacon.showBeaconApp();
+
+    if (M5.BtnA.wasReleased()) {
+        //monitor.nextPage();
+    } else if (M5.BtnB.wasReleased()) {
+        // Close app and return to main menu
+        beacon.toggleAppRunning();
+        beacon.closeBeaconApp();
+        menuItem.deactivateCallbacks();
+    } else if (M5.BtnC.wasReleased()) {
+        //monitor.resetMonitorPage();
+    }
+}
 
 // *** OLD CODE ***
 
@@ -583,10 +600,10 @@ void handleDnsRequestSerial() {
         String command = Serial.readStringUntil('\n');
         checkSerialCommands(command, false);
     }
-    if (ESP_BT.available()) {
+    if (wireless.ESP_BT.available()) {
         String command = "";
-        while (ESP_BT.available()) {
-            char c = ESP_BT.read();
+        while (wireless.ESP_BT.available()) {
+            char c = wireless.ESP_BT.read();
             command += c;
             if (c == '\n') {
                 break;
@@ -600,7 +617,7 @@ void handleDnsRequestSerial() {
 void onOffBleSerial(CallbackMenuItem& menuItem) {
     if (bluetoothEnabled) {
         ui.waitAndReturnToMenu("   Bluetooth OFF");
-        ESP_BT.end();
+        wireless.ESP_BT.end();
         sendMessage("Bluetooth turned off");
     } else {
         WiFi.mode(WIFI_OFF);
@@ -610,8 +627,8 @@ void onOffBleSerial(CallbackMenuItem& menuItem) {
         esp_wifi_stop();
         esp_wifi_deinit();
         ui.waitAndReturnToMenu("   Bluetooth ON");
-        ESP_BT.begin(bluetoothName);
-        ESP_BT.setPin("730303"); // NOT WORKING // WORK ONLY WITH esp v1.0.1 // workaround password in serial
+        wireless.ESP_BT.begin(bluetoothName);
+        wireless.ESP_BT.setPin("730303"); // NOT WORKING // WORK ONLY WITH esp v1.0.1 // workaround password in serial
         sendMessage("Bluetooth turned on");
     }
     bluetoothEnabled = !bluetoothEnabled;
@@ -669,11 +686,11 @@ void checkSerialCommands(String command, bool fromBluetooth) {
         if (connectionState == AWAITING_PASSWORD) {
             if (command.equals(BLUETOOTH_SERIAL_PASSWORD)) {
                 connectionState = AUTHENTICATED;
-                ESP_BT.println("Password correct, you are now authenticated");
+                wireless.ESP_BT.println("Password correct, you are now authenticated");
                 return;
             } else {
-                ESP_BT.println("Password protected.");
-                ESP_BT.disconnect();
+                wireless.ESP_BT.println("Password protected.");
+                wireless.ESP_BT.disconnect();
                 return;
             }
         }
@@ -705,7 +722,7 @@ void checkSerialCommands(String command, bool fromBluetooth) {
             sendMessage("Open Captive portal set");
         } else if (command.startsWith("detail_ssid")) {
             int ssidIndex = command.substring(String("detail_ssid ").length()).toInt();
-            String security = getWifiSecurity(ssidIndex);
+            String security = wireless.getWifiSecurity(ssidIndex);
             int32_t rssi = WiFi.RSSI(ssidIndex);
             uint8_t* bssid = WiFi.BSSID(ssidIndex);
             String macAddress = bssidToString(bssid);
@@ -791,8 +808,8 @@ void checkSerialCommands(String command, bool fromBluetooth) {
             delay(200);
         } else if (command == "exit") {
             sendMessage("Disconnecting Bluetooth.");
-            ESP_BT.println("Disconnecting. Connexion protected by Password.");
-            ESP_BT.disconnect();
+            wireless.ESP_BT.println("Disconnecting. Connexion protected by Password.");
+            wireless.ESP_BT.disconnect();
             connectionState = AWAITING_PASSWORD;
             return;
         } else if (command == "help") {
@@ -842,7 +859,7 @@ void selectNetwork(int index) {
 void sendMessage(String message) {
     // Send Message over serial/BLE
     Serial.println(message);
-    ESP_BT.print(message + "\n");
+    wireless.ESP_BT.print(message + "\n");
 }
 
 
@@ -954,7 +971,7 @@ void showWifiDetails(int &networkIndex) {
             y += 20;
 
             // Security
-            String security = getWifiSecurity(networkIndex);
+            String security = wireless.getWifiSecurity(networkIndex);
             M5.Display.setCursor(10, y);
             M5.Display.println("Security: " + (security.length() > 0 ? security : "N/A"));
             y += 20;
@@ -1015,25 +1032,6 @@ void showWifiDetails(int &networkIndex) {
     }
 }
 
-
-String getWifiSecurity(int networkIndex) {
-    switch (WiFi.encryptionType(networkIndex)) {
-        case WIFI_AUTH_OPEN:
-            return "Open";
-        case WIFI_AUTH_WEP:
-            return "WEP";
-        case WIFI_AUTH_WPA_PSK:
-            return "WPA_PSK";
-        case WIFI_AUTH_WPA2_PSK:
-            return "WPA2_PSK";
-        case WIFI_AUTH_WPA_WPA2_PSK:
-            return "WPA_WPA2_PSK";
-        case WIFI_AUTH_WPA2_ENTERPRISE:
-            return "WPA2_ENTERPRISE";
-        default:
-            return "Unknown";
-    }
-}
 
 String bssidToString(uint8_t* bssid) {
     char mac[18];
@@ -1687,7 +1685,7 @@ void displayCredentials(int index) {
 
 
 void deleteCredentials(CallbackMenuItem& menuItem) {
-    if (ui.confirmPopup("Delete credentials?")) {
+    if (ui.confirmPopup("Delete credentials?", true)) {
         File file = openFile("/credentials.txt", FILE_WRITE);
 
         if (file) {
@@ -1748,7 +1746,6 @@ void probeSniffing() {
         stopProbeSniffingViaSerial = false;
     }
 }
-
 
 
 void karmaAttack() {
@@ -1946,7 +1943,7 @@ void startScanKarma() {
     ssid_count_Karma = 0;
     M5.Display.clear();
     drawStopButtonKarma();
-    ESP_BT.end();
+    wireless.ESP_BT.end();
     bluetoothEnabled = false;
     esp_wifi_set_promiscuous(false);
     esp_wifi_stop();
@@ -1983,7 +1980,7 @@ void stopScanKarma() {
         }
         sendMessage(String(ssid_count_Karma) + " SSIDs saved on SD.");
     } else if (isProbeSniffingMode && ssid_count_Karma > 0) {
-        bool saveSSID = ui.confirmPopup("   Save " + String(ssid_count_Karma) + " SSIDs?");
+        bool saveSSID = ui.confirmPopup("   Save " + String(ssid_count_Karma) + " SSIDs?", true);
         if (saveSSID) {
             M5.Display.clear();
             M5.Display.setCursor(50 , M5.Display.height()/ 2 );
@@ -2168,7 +2165,7 @@ void startAPWithSSIDKarma(const char* ssid) {
         WiFi.mode(WIFI_STA);
     }
     delay(2000);
-    if (ui.confirmPopup("Save " + String(ssid) + " ?" )) {
+    if (ui.confirmPopup("Save " + String(ssid) + " ?" , true)) {
         saveSSIDToFile(ssid);
     }
     ui.setInMenu(true);
@@ -2341,7 +2338,7 @@ void deleteProbe() {
     bool success = false;
     if (selectedIndex >= 0 && selectedIndex < numProbes) {
         String selectedProbe = probes[selectedIndex];
-        if (ui.confirmPopup("Delete " + selectedProbe + " probe ?")) {
+        if (ui.confirmPopup("Delete " + selectedProbe + " probe ?", true)) {
             success = removeProbeFromFile("/probes.txt", selectedProbe);
         }
 
@@ -2440,7 +2437,7 @@ bool removeProbeFromFile(const char* filepath, const String& probeToRemove) {
 }
 
 void deleteAllProbes(CallbackMenuItem& menuItem){
-    if (ui.confirmPopup("Delete All Probes ?")) {
+    if (ui.confirmPopup("Delete All Probes ?", true)) {
         File file = openFile("/probes.txt", FILE_WRITE);
         if (file) {
             file.close();
@@ -2464,46 +2461,6 @@ void deleteAllProbes(CallbackMenuItem& menuItem){
 
 //probe attack
 
-
-uint8_t originalMAC[6];
-
-void saveOriginalMAC() {
-    esp_wifi_get_mac(WIFI_IF_STA, originalMAC);
-}
-
-void restoreOriginalMAC() {
-    esp_wifi_set_mac(WIFI_IF_STA, originalMAC);
-}
-
-String generateRandomSSID(int length) {
-    const char charset[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-    String randomString;
-    for (int i = 0; i < length; i++) {
-        int index = random(0, sizeof(charset) - 1);
-        randomString += charset[index];
-    }
-    return randomString;
-}
-
-String generateRandomMAC() {
-    uint8_t mac[6];
-    for (int i = 0; i < 6; ++i) {
-        mac[i] = random(0x00, 0xFF);
-    }
-    char macStr[18];
-    snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    return String(macStr);
-}
-
-void setRandomMAC_STA() {
-    String mac = generateRandomMAC();
-    uint8_t macArray[6];
-    sscanf(mac.c_str(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &macArray[0], &macArray[1], &macArray[2], &macArray[3], &macArray[4], &macArray[5]);
-    esp_wifi_set_mac(WIFI_IF_STA, macArray);
-    delay(50);
-}
-
-
 int checkNb = 0;
 bool useCustomProbes;
 std::vector<String> customProbes;
@@ -2514,7 +2471,7 @@ void probeAttack() {
     useCustomProbes = false;
 
     if (!isItSerialCommand){
-        useCustomProbes = ui.confirmPopup("Use custom probes?");
+        useCustomProbes = ui.confirmPopup("Use custom probes?", true);
         M5.Display.clear();
         if (useCustomProbes) {
             customProbes = config.readCustomProbes();
@@ -2553,13 +2510,13 @@ void probeAttack() {
         handleDnsRequestSerial();
         if (currentMillis - previousMillis >= delayTime) {
             previousMillis = currentMillis;
-            setRandomMAC_STA();
-            setNextWiFiChannel();
+            wireless.setRandomMAC_STA();
+            wireless.setNextWiFiChannel();
             String ssid;
             if (!customProbes.empty()) {
                 ssid = customProbes[probeCount % customProbes.size()];
             } else {
-                ssid = generateRandomSSID(32);
+                ssid = wireless.generateRandomSSID(32);
             }
 #if LED_ENABLED
             led.pattern5();
@@ -2595,34 +2552,9 @@ void probeAttack() {
     sendMessage("-------------------");
     sendMessage("Stopping Probe Attack");
     sendMessage("-------------------");
-    restoreOriginalWiFiSettings();
+    wireless.restoreOriginalWiFiSettings();
     useCustomProbes = false;
     ui.setInMenu(true);
-}
-
-int currentChannel = 1;
-int originalChannel = 1;
-
-void setNextWiFiChannel() {
-    currentChannel++;
-    if (currentChannel > 14) {
-        currentChannel = 1;
-    }
-    esp_wifi_set_channel(currentChannel, WIFI_SECOND_CHAN_NONE);
-}
-
-void restoreOriginalWiFiSettings() {
-    esp_wifi_set_promiscuous(false);
-    esp_wifi_stop();
-    esp_wifi_set_promiscuous_rx_cb(NULL);
-    esp_wifi_deinit();
-    delay(300); // Petite pause pour s'assurer que tout est terminé
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    esp_wifi_init(&cfg);
-    esp_wifi_start();
-    WiFi.softAPConfig(IPAddress(192, 168, 4, 1), IPAddress(192, 168, 4, 1), IPAddress(255, 255, 255, 0));
-    restoreOriginalMAC();
-    WiFi.mode(WIFI_STA);
 }
 // probe attack end
 
@@ -2631,7 +2563,7 @@ void restoreOriginalWiFiSettings() {
 bool isAPDeploying = false;
 
 void startAutoKarma() {
-    ESP_BT.end();
+    wireless.ESP_BT.end();
     bluetoothEnabled = false;
     esp_wifi_set_promiscuous(false);
     esp_wifi_stop();
@@ -2688,56 +2620,6 @@ void saveOriginalMACKarma() {
 
 void restoreOriginalMACKarma() {
     esp_wifi_set_mac(WIFI_IF_AP, originalMACKarma);
-}
-
-String generateRandomMACKarma() {
-    uint8_t mac[6];
-    for (int i = 0; i < 6; ++i) {
-        mac[i] = random(0x00, 0xFF);
-    }
-    // Force unicast byte
-    mac[0] &= 0xFE;
-
-    char macStr[18];
-    snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    return String(macStr);
-}
-
-void setRandomMAC_APKarma() {
-    esp_wifi_stop();
-
-    wifi_mode_t currentMode;
-    esp_wifi_get_mode(&currentMode);
-    if (currentMode != WIFI_MODE_AP && currentMode != WIFI_MODE_APSTA) {
-        esp_wifi_set_mode(WIFI_MODE_AP);
-    }
-
-    String macKarma = generateRandomMACKarma();
-    uint8_t macArrayKarma[6];
-    sscanf(macKarma.c_str(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &macArrayKarma[0], &macArrayKarma[1], &macArrayKarma[2], &macArrayKarma[3], &macArrayKarma[4], &macArrayKarma[5]);
-
-    esp_err_t ret = esp_wifi_set_mac(WIFI_IF_AP, macArrayKarma);
-    if (ret != ESP_OK) {
-        sendMessage("Error setting MAC: " + String(ret));
-        esp_wifi_set_mode(currentMode);
-        return;
-    }
-
-    ret = esp_wifi_start();
-    if (ret != ESP_OK) {
-        sendMessage("Error starting WiFi: " + String(ret));
-        esp_wifi_set_mode(currentMode);
-        return;
-    }
-}
-
-
-String getMACAddress() {
-    uint8_t mac[6];
-    esp_wifi_get_mac(WIFI_IF_AP, mac);
-    char macStr[18];
-    sprintf(macStr, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    return String(macStr);
 }
 
 
@@ -2809,7 +2691,7 @@ void activateAPForAutoKarma(const char* ssid) {
 #endif
     isAPDeploying = true;
     isInitialDisplayDone = false;
-    setRandomMAC_APKarma(); // Set random MAC for AP
+    wireless.setRandomMAC_APKarma(); // Set random MAC for AP
 
     if (captivePortalPassword == "") {
         WiFi.softAP(ssid);
@@ -2817,7 +2699,7 @@ void activateAPForAutoKarma(const char* ssid) {
         WiFi.softAP(ssid ,captivePortalPassword.c_str());
     }
     // Display MAC, SSID, and channel
-    String macAddress = getMACAddress();
+    String macAddress = wireless.getMACAddress();
     sendMessage("-------------------");
     sendMessage("Starting Karma AP for : " + String(ssid));
     sendMessage("MAC Address: " + macAddress);
@@ -2862,7 +2744,7 @@ void activateAPForAutoKarma(const char* ssid) {
 
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_MODE_STA);
-    ESP_BT.end();
+    wireless.ESP_BT.end();
     bluetoothEnabled = false;
     esp_wifi_set_promiscuous(false);
     esp_wifi_stop();
@@ -3119,7 +3001,7 @@ void wardrivingMode() {
 
         if (M5.BtnB.isPressed()) {
             exitWardriving = true;
-            if (ui.confirmPopup("List Open Networks?")) {
+            if (ui.confirmPopup("List Open Networks?", true)) {
                 createKarmaList(maxIndex);
             }
             ui.waitAndReturnToMenu("Stopping Wardriving.");
@@ -3293,122 +3175,6 @@ void karmaSpear() {
 }
 
 
-// beacon attack
-
-std::vector<String> readCustomBeacons(const char* filename) {
-    File file = openFile(filename, FILE_READ);
-    std::vector<String> customBeacons;
-
-    if (!file) {
-        sendMessage("Failed to open file for reading");
-        return customBeacons;
-    }
-
-    while (file.available()) {
-        String line = file.readStringUntil('\n');
-        if (line.startsWith("CustomBeacons=")) {
-            String beaconsStr = line.substring(String("CustomBeacons=").length());
-            int idx = 0;
-            while ((idx = beaconsStr.indexOf(',')) != -1) {
-                customBeacons.push_back(beaconsStr.substring(0, idx));
-                beaconsStr = beaconsStr.substring(idx + 1);
-            }
-            if (beaconsStr.length() > 0) {
-                customBeacons.push_back(beaconsStr); // Ajouter le dernier élément
-            }
-            break;
-        }
-    }
-    file.close();
-    return customBeacons;
-}
-
-void beaconAttack() {
-    WiFi.mode(WIFI_MODE_AP);
-
-    // Demander à l'utilisateur s'il souhaite utiliser des beacons personnalisés
-    bool useCustomBeacons = ui.confirmPopup("Use custom beacons?");
-    M5.Display.clear();
-
-    std::vector<String> customBeacons;
-    if (useCustomBeacons) {
-        customBeacons = readCustomBeacons("/config/config.txt"); // Remplacer par le chemin réel
-    }
-
-    int beaconCount = 0;
-    unsigned long previousMillis = 0;
-    int delayTimeBeacon = 0; // Délai entre les beacons
-    const int debounceDelay = 200;
-    unsigned long lastDebounceTime = 0;
-
-    M5.Display.fillRect(0, M5.Display.height() - 60, M5.Display.width(), 60, TFT_RED);
-    M5.Display.setCursor(135, M5.Display.height() - 40);
-    M5.Display.setTextColor(TFT_WHITE);
-    M5.Display.println("Stop");
-
-    int beaconTextX = 10;
-    String beaconText = "Beacon Spam running...";
-    M5.Display.setCursor(beaconTextX, 50);
-    M5.Display.println(beaconText);
-    beaconText = "Beacon sent:" ;
-    M5.Display.setCursor(beaconTextX, 70);
-    M5.Display.print(beaconText);
-    sendMessage("-------------------");
-    sendMessage("Starting Beacon Spam");
-    sendMessage("-------------------");
-
-    while (!M5.BtnB.isPressed()) {
-        unsigned long currentMillis = millis();
-        if (currentMillis - previousMillis >= delayTimeBeacon) {
-            previousMillis = currentMillis;
-            // Générer un nouveau SSID pour le beacon
-            String ssid;
-            if (!customBeacons.empty()) {
-                ssid = customBeacons[beaconCount % customBeacons.size()]; // Utiliser un beacon personnalisé
-            } else {
-                ssid = generateRandomSSID(32); // Utiliser un beacon aléatoire
-            }
-
-            // Effacer la zone d'affichage précédente de l'SSID
-            int x = 5;
-            int y = 90;
-            int width = M5.Display.width();
-            int height = 20; // Hauteur du rectangle
-            M5.Display.fillRect(x, y, width, height, TFT_BLACK);
-
-            // Réécrire le nouvel SSID
-            M5.Display.setCursor(x, y);
-            M5.Display.setTextSize(1.5);
-            M5.Display.print(ssid);
-            M5.Display.setTextSize(2);
-            WiFi.softAP(ssid.c_str());
-            delay(50);
-            for (int channel = 1; channel <= 13; ++channel) {
-                setRandomMAC_APKarma();
-                esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
-                delay(150);
-                if (M5.BtnB.isPressed()) {
-                    break;
-                }
-            }
-            delay(50);
-
-            beaconCount++;
-        }
-
-        M5.update();
-        if (M5.BtnB.isPressed() && currentMillis - lastDebounceTime > debounceDelay) {
-            break;
-        }
-        delay(10);
-    }
-    sendMessage("-------------------");
-    sendMessage("Stopping beacon Spam");
-    sendMessage("-------------------");
-    restoreOriginalWiFiSettings();
-    ui.waitAndReturnToMenu("Beacon Spam Stopped...");
-}
-
 void snifferCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
     if (type != WIFI_PKT_MGMT) return; // Se concentrer uniquement sur les paquets de gestion
 
@@ -3535,7 +3301,7 @@ void deauthDetect() {
     M5.Display.clear();
     M5.Lcd.setTextSize(2);
     M5.Lcd.setTextColor(WHITE, BLACK);
-    ESP_BT.end();
+    wireless.ESP_BT.end();
     bluetoothEnabled = false;
     esp_wifi_set_promiscuous(false);
     esp_wifi_stop();
