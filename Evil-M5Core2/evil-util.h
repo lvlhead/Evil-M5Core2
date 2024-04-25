@@ -43,8 +43,11 @@
 #define BLUETOOTH_NAME "E7vhi3l0tMh53Cro0rne32"
 
 File openFile(String filename, const char* mode);
-void sendUtilMessage(String message);
+void sendMessage(String message);
 
+extern int currentBrightness;
+extern bool bluetoothEnabled;
+extern String currentClonedSSID;
 extern bool isCaptivePortalOn;
 extern String selectedPortalFile;
 extern String ssidList[100];

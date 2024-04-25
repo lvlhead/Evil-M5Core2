@@ -62,9 +62,9 @@ void EvilBeacon::showBeaconApp() {
             customBeacons = readCustomBeacons("/config/config.txt"); // Replace with the actual path
         }
 
-        sendUtilMessage("-------------------");
-        sendUtilMessage("Starting Beacon Spam");
-        sendUtilMessage("-------------------");
+        sendMessage("-------------------");
+        sendMessage("Starting Beacon Spam");
+        sendMessage("-------------------");
         toggleAppRunning();
     }
 
@@ -76,9 +76,9 @@ void EvilBeacon::showBeaconApp() {
 
 void EvilBeacon::closeBeaconApp() {
     toggleAppRunning();
-    sendUtilMessage("-------------------");
-    sendUtilMessage("Stopping beacon Spam");
-    sendUtilMessage("-------------------");
+    sendMessage("-------------------");
+    sendMessage("Stopping beacon Spam");
+    sendMessage("-------------------");
     wireless.restoreOriginalWiFiSettings();
     ui.waitAndReturnToMenu("Beacon Spam Stopped...");
 }

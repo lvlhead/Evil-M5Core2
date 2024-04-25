@@ -41,9 +41,6 @@ EvilWireless::EvilWireless() {
     currentChannel = 1;
     originalChannel = 1;
     numSsid = 0;
-    clonedSSID = "Evil-M5Core2";
-    isCaptivePortalOn = false;
-    bluetoothEnabled = false;
 }
 
 String EvilWireless::generateRandomSSID(int length) {
@@ -73,20 +70,20 @@ void EvilWireless::setRandomMAC_APKarma() {
         esp_wifi_set_mode(WIFI_MODE_AP);
     }
 
-    String macKarma = generateRandomMACKarma();
+    String macKarma = generateRandomMAC(true);
     uint8_t macArrayKarma[6];
     sscanf(macKarma.c_str(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &macArrayKarma[0], &macArrayKarma[1], &macArrayKarma[2], &macArrayKarma[3], &macArrayKarma[4], &macArrayKarma[5]);
 
     esp_err_t ret = esp_wifi_set_mac(WIFI_IF_AP, macArrayKarma);
     if (ret != ESP_OK) {
-        sendUtilMessage("Error setting MAC: " + String(ret));
+        sendMessage("Error setting MAC: " + String(ret));
         esp_wifi_set_mode(currentMode);
         return;
     }
 
     ret = esp_wifi_start();
     if (ret != ESP_OK) {
-        sendUtilMessage("Error starting WiFi: " + String(ret));
+        sendMessage("Error starting WiFi: " + String(ret));
         esp_wifi_set_mode(currentMode);
         return;
     }
@@ -106,13 +103,16 @@ void EvilWireless::restoreOriginalWiFiSettings() {
     WiFi.mode(WIFI_STA);
 }
 
-String EvilWireless::generateRandomMACKarma() {
+String EvilWireless::generateRandomMAC(bool karmaMode) {
     uint8_t mac[6];
     for (int i = 0; i < 6; ++i) {
         mac[i] = random(0x00, 0xFF);
     }
-    // Force unicast byte
-    mac[0] &= 0xFE;
+
+    if (karmaMode) {
+        // Force unicast byte
+        mac[0] &= 0xFE;
+    }
 
     char macStr[18];
     snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
@@ -135,18 +135,8 @@ void EvilWireless::setNextWiFiChannel() {
     esp_wifi_set_channel(currentChannel, WIFI_SECOND_CHAN_NONE);
 }
 
-String EvilWireless::generateRandomMAC() {
-    uint8_t mac[6];
-    for (int i = 0; i < 6; ++i) {
-        mac[i] = random(0x00, 0xFF);
-    }
-    char macStr[18];
-    snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    return String(macStr);
-}
-
 void EvilWireless::setRandomMAC_STA() {
-    String mac = generateRandomMAC();
+    String mac = generateRandomMAC(false);
     uint8_t macArray[6];
     sscanf(mac.c_str(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &macArray[0], &macArray[1], &macArray[2], &macArray[3], &macArray[4], &macArray[5]);
     esp_wifi_set_mac(WIFI_IF_STA, macArray);
@@ -188,22 +178,6 @@ void EvilWireless::onOffBleSerial() {
     bluetoothEnabled = !bluetoothEnabled;
 }
 
-void EvilWireless::setBluetoothEnabled(bool enabled) {
-    bluetoothEnabled = enabled;
-}
-
-bool EvilWireless::getBluetoothEnabled() {
-    return bluetoothEnabled;
-}
-
-void EvilWireless::setClonedSSID(String ssid) {
-    clonedSSID = ssid;
-}
-
-String EvilWireless::getClonedSSID() {
-    return clonedSSID;
-}
-
 int EvilWireless::getNumSSID() {
     return numSsid;
 }
@@ -234,13 +208,13 @@ void EvilWireless::firstScanWifiNetworks() {
     int n = scanAvailableSSID();
 
     if (n == 0) {
-        sendUtilMessage("No network found ...");
+        sendMessage("No network found ...");
     } else {
-        sendUtilMessage(" Near Wifi Networks : ");
-        sendUtilMessage("-------------------");
+        sendMessage(" Near Wifi Networks : ");
+        sendMessage("-------------------");
         for (int i = 0; i < numSsid; i++) {
-            sendUtilMessage(String(i) + ": " + ssidList[i]);
+            sendMessage(String(i) + ": " + ssidList[i]);
         }
-        sendUtilMessage("-------------------");
+        sendMessage("-------------------");
     }
 }

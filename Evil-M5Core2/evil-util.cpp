@@ -40,13 +40,13 @@ extern "C" {
 File openFile(String filename, const char* mode = FILE_READ) {
     File file = SD.open(filename, mode);
     if (!file) {
-        sendUtilMessage("Error opening " + filename);
+        sendMessage("Error opening " + filename);
         return File();
     }
     return file;
 }
 
-void sendUtilMessage(String message) {
+void sendMessage(String message) {
     // Send Message over serial/BLE
     EvilWireless wireless;
     Serial.println(message);

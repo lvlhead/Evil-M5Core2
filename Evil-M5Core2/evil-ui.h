@@ -49,6 +49,7 @@ class EvilUI {
     void writeVectorMessage(std::vector<String> messages, int x, int y, int incr);
     bool confirmPopup(String message, bool clearScreen);
     void aboutScreen(String message);
+    void clearAppScreen();
     bool clearScreenDelay();
     // TODO: Remove old Menu functions
     void waitAndReturnToMenu(String message);

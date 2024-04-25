@@ -152,11 +152,15 @@ void EvilUI::setInMenu(bool val) {
     inMenu = val;
 }
 
+void EvilUI::clearAppScreen() {
+    M5.Display.fillRect(0, 0, M5.Display.width(), 200, TFT_LIGHTGREY);
+}
+
 bool EvilUI::clearScreenDelay() {
     unsigned long currentMillis = millis();
     if (currentMillis - previousMillis >= 500) {
             previousMillis = currentMillis;
-            M5.Display.fillRect(0, 0, M5.Display.width(), 200, TFT_LIGHTGREY);
+            clearAppScreen();
             return true;
     }
     return false;

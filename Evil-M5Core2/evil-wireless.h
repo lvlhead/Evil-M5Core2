@@ -47,25 +47,18 @@ class EvilWireless {
     String generateRandomSSID(int length);
     void restoreOriginalWiFiSettings();
     void setRandomMAC_APKarma();
-    String generateRandomMACKarma();
     void saveOriginalMAC();
     String getMACAddress();
     void setNextWiFiChannel();
     void setRandomMAC_STA();
-    String generateRandomMAC();
+    String generateRandomMAC(bool karmaMode);
     String getWifiSecurity(int networkIndex);
     void onOffBleSerial();
-    void setBluetoothEnabled(bool enabled);
-    bool getBluetoothEnabled();
-    void setClonedSSID(String ssid);
-    String getClonedSSID();
     void firstScanWifiNetworks();
     int getNumSSID();
   private:
     int currentChannel;
     int originalChannel;
-    String clonedSSID;
-    bool bluetoothEnabled;
     uint8_t originalMAC[6];
     void restoreOriginalMAC();
     int scanAvailableSSID();
