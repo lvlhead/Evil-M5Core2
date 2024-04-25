@@ -45,7 +45,8 @@ class EvilUI {
     void init();
     void drawImage(const char *filepath);
     void writeSingleMessage(String message, bool clearScreen);
-    void writeVectorMessage(std::vector<String> messages, int x, int y);
+    void writeMessageXY(String message, int x, int y, bool clearScreen);
+    void writeVectorMessage(std::vector<String> messages, int x, int y, int incr);
     bool confirmPopup(String message);
     void aboutScreen(String message);
     bool clearScreenDelay();

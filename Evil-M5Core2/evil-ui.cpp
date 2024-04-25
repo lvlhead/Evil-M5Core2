@@ -55,7 +55,17 @@ void EvilUI::writeSingleMessage(String message, bool clearScreen = false) {
     M5.Display.drawString(message, M5.Display.width() / 2, M5.Display.height() / 2);
 }
 
-void EvilUI::writeVectorMessage(std::vector<String> messages, int x, int y) {
+void EvilUI::writeMessageXY(String message, int x, int y, bool clearScreen = false) {
+    if (clearScreen) {
+        M5.Display.clear();
+    }
+    M5.Display.setTextSize(2);
+    M5.Display.setTextColor(TFT_BLACK);
+    M5.Display.setCursor(x, y);
+    M5.Display.println(message);
+}
+
+void EvilUI::writeVectorMessage(std::vector<String> messages, int x, int y, int incr) {
     //M5.Display.clear();
     M5.Display.setTextSize(2);
     M5.Display.setTextColor(TFT_BLACK);
@@ -64,7 +74,7 @@ void EvilUI::writeVectorMessage(std::vector<String> messages, int x, int y) {
     {
         M5.Display.setCursor(x, y);
         M5.Display.println(messages[i]);
-        y += 30;
+        y += incr;
     }
 
     M5.Display.display();
