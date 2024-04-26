@@ -107,7 +107,6 @@ void EvilMonitor::Page1() {
     messages.push_back("Portal: " + String(isCaptivePortalOn ? "On" : "Off"));
     messages.push_back("Page: " + selectedPortalFile.substring(7));
     messages.push_back("Bluetooth: " + String(bluetoothEnabled ? "On" : "Off"));
-    Serial.println(bluetoothEnabled);
     ui.writeVectorMessage(messages, 10, 30, 30);
 
     oldNumClients = newNumClients;

@@ -86,18 +86,14 @@ void EvilUI::aboutScreen(String message) {
     int lineY1 = textY - lineOffset;
     int lineY2 = textY + lineOffset + 30;
 
-    M5.Display.clear();
-    M5.Display.drawLine(0, lineY1, M5.Display.width(), lineY1, TFT_WHITE);
-    M5.Display.drawLine(0, lineY2, M5.Display.width(), lineY2, TFT_WHITE);
+    M5.Display.clear(LIGHTGREY);
+    M5.Display.drawLine(0, lineY1, M5.Display.width(), lineY1, BLACK);
+    M5.Display.drawLine(0, lineY2, M5.Display.width(), lineY2, BLACK);
 
-    M5.Display.setCursor(80, textY);
-    M5.Display.println(" Evil-M5Core2");
-    M5.Display.setCursor(75, textY + 20);
-    M5.Display.println("By 7h30th3r0n3");
-    M5.Display.setCursor(102, textY + 45);
-    M5.Display.println(APP_VERSION);
-    M5.Display.setCursor(0 , textY + 120);
-    M5.Display.println(message);
+    writeMessageXY("Evil-M5Core2", 80, 80, false);
+    writeMessageXY("By 7h30th3r0n3", 75, 100, false);
+    writeMessageXY(APP_VERSION, 102, 125, false);
+    writeMessageXY(message, 0, 200, false);
 }
 
 void EvilUI::waitAndReturnToMenu(String message) {

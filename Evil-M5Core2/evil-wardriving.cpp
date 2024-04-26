@@ -80,7 +80,6 @@ void EvilWardrive::showWardriveApp() {
             String name = entry.name();
             int startIndex = name.indexOf('-') + 1;
             int endIndex = name.indexOf('.');
-            Serial.println(name + " " + String(startIndex) + " " + endIndex);
             if (startIndex > 0 && endIndex > startIndex) {
                 int fileIndex = name.substring(startIndex, endIndex).toInt();
                 if (fileIndex > maxIndex) {
@@ -96,7 +95,6 @@ void EvilWardrive::showWardriveApp() {
 
     // Run the app
     if (ui.clearScreenDelay()) {
-        Serial.println("Running wardriving");
         wardrivingMode();
     }
 }

