@@ -163,7 +163,7 @@ bool isItSerialCommand = false;
 
 // deauth and pwnagotchi detector part
 
-const long channelHopInterval = 200;
+const long channelHopInterval = 5000;
 unsigned long lastChannelHopTime = 0;
 int currentChannelDeauth = 1;
 bool autoChannelHop = true; // Starts in auto mode
@@ -172,6 +172,10 @@ bool lastDisplayedMode = !autoChannelHop; // Initialize to the opposite to force
 unsigned long lastScreenClearTime = 0; // To track the last screen clear
 char macBuffer[18];
 int maxChannelScanning = 13;
+int nombreDeHandshakes = 0; // Nombre de handshakes/PMKID capturés
+int nombreDeDeauth = 0;
+int nombreDeEAPOL = 0;
+File pcapFile;
 // deauth and pwnagotchi detector end
 
 String ssidList[100];
@@ -733,6 +737,7 @@ void checkSerialCommands(String command, bool fromBluetooth) {
         } else if (command.startsWith("select_network")) {
             int ssidIndex = command.substring(String("select_network ").length()).toInt();
             selectNetwork(ssidIndex);
+            sendMessage("SSID sélectionné: " + currentlySelectedSSID);
         } else if (command.startsWith("change_ssid ")) {
             String newSSID = command.substring(String("change_ssid ").length());
             currentClonedSSID = newSSID;
@@ -2102,6 +2107,10 @@ void startAPWithSSIDKarma(const char* ssid) {
 
 void listProbes() {
     File file = openFile("/probes.txt", FILE_READ);
+    if (!file) {
+        ui.waitAndReturnToMenu("Failed to open probes.txt");
+        return;
+    }
 
     String probes[MAX_SSIDS_Karma];
     int numProbes = 0;
@@ -2195,6 +2204,10 @@ bool isProbePresent(String probes[], int numProbes, String probe) {
 
 void deleteProbe() {
     File file = openFile("/probes.txt", FILE_READ);
+    if (!file) {
+        ui.waitAndReturnToMenu("Failed to open probes.txt");
+        return;
+    }
 
     String probes[MAX_SSIDS_Karma];
     int numProbes = 0;
@@ -2837,11 +2850,32 @@ void karmaSpear() {
 }
 
 
-void snifferCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
-    if (type != WIFI_PKT_MGMT) return; // Se concentrer uniquement sur les paquets de gestion
+// sniff handshake/deauth/pwnagotchi
 
-    const wifi_promiscuous_pkt_t *pkt = (wifi_promiscuous_pkt_t *)buf;
-    const wifi_pkt_rx_ctrl_t ctrl = (wifi_pkt_rx_ctrl_t)pkt->rx_ctrl;
+bool haveBeacon = false;
+std::set<String> registeredBeacons;
+unsigned long lastTime = 0;  // Last time update
+unsigned int packetCount = 0;  // Number of packets received
+
+void snifferCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
+    packetCount++;
+    unsigned long currentTime = millis();
+    if (currentTime - lastTime >= 1000) {
+        if (packetCount < 100) {
+            M5.Lcd.setCursor(224, 0);
+        } else {
+            M5.Lcd.setCursor(212, 0);
+        }
+        M5.Lcd.printf(" PPS:%d ", packetCount);
+
+        lastTime = currentTime;
+        packetCount = 0;
+    }
+
+    if (type != WIFI_PKT_DATA && type != WIFI_PKT_MGMT) return;
+
+    wifi_promiscuous_pkt_t *pkt = (wifi_promiscuous_pkt_t *)buf;
+    wifi_pkt_rx_ctrl_t ctrl = pkt->rx_ctrl;
     const uint8_t *frame = pkt->payload;
     const uint16_t frameControl = (uint16_t)frame[0] | ((uint16_t)frame[1] << 8);
 
@@ -2849,31 +2883,31 @@ void snifferCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
     const uint8_t frameType = (frameControl & 0x0C) >> 2;
     const uint8_t frameSubType = (frameControl & 0xF0) >> 4;
 
-    // Vérifier si c'est un paquet de désauthentification
-    if (frameType == 0x00 && frameSubType == 0x0C) {
+    if (estUnPaquetEAPOL(pkt)) {
+        Serial.println("EAPOL Detected !!!!");
         // Extraire les adresses MAC
         const uint8_t *receiverAddr = frame + 4;  // Adresse 1
         const uint8_t *senderAddr = frame + 10;  // Adresse 2
         // Affichage sur le port série
-        sendMessage("-------------------");
-        sendMessage("Deauth Packet detected !!! :");
-        sendMessage("CH: " + String(ctrl.channel));
-        sendMessage("RSSI: " + String(ctrl.rssi));
-        sendMessage("Station: "); printAddress(senderAddr);
-        sendMessage("Client: "); printAddress(receiverAddr);
-        sendMessage("");
+        Serial.print("Address MAC destination: ");
+        printAddress(receiverAddr);
+        Serial.print("Address MAC expedition: ");
+        printAddress(senderAddr);
 
-        // Affichage sur l'écran
-        M5.Lcd.setTextColor(WHITE, BLACK);
-        M5.Lcd.setCursor(0, 64);
-        M5.Lcd.printf("Deauth Detected!");
-        M5.Lcd.setCursor(0, 85);
-        M5.Lcd.printf("CH: %d RSSI: %d  ", ctrl.channel, ctrl.rssi);
-        M5.Lcd.setCursor(0, 106);
-        M5.Lcd.print("Station: "); printAddressLCD(senderAddr);
-        M5.Lcd.setCursor(0, 127);
-        M5.Lcd.print("Client: "); printAddressLCD(receiverAddr);
+        enregistrerDansFichierPCAP(pkt, false);
+        nombreDeEAPOL++;
+        M5.Lcd.setCursor(260, 18);
+        M5.Lcd.printf("H:");
+        M5.Lcd.print(nombreDeHandshakes);
+        if (nombreDeEAPOL < 999) {
+            M5.Lcd.setCursor(212, 36);
+        } else {
+            M5.Lcd.setCursor(202, 36);
+        }
+        M5.Lcd.printf("EAPOL:");
+        M5.Lcd.print(nombreDeEAPOL);
     }
+
     if (frameType == 0x00 && frameSubType == 0x08) {
         const uint8_t *senderAddr = frame + 10; // Adresse source dans la trame beacon
 
@@ -2922,7 +2956,46 @@ void snifferCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
             } else {
                 sendMessage("JSON start not found in ESSID");
             }
+        } else {
+            pkt->rx_ctrl.sig_len -= 4;  // Réduire la longueur du signal de 4 bytes
+            enregistrerDansFichierPCAP(pkt, true);  // Enregistrer le paquet
         }
+    }
+
+    // Vérifier si c'est un paquet de désauthentification
+    if (frameType == 0x00 && frameSubType == 0x0C) {
+        // Extraire les adresses MAC
+        const uint8_t *receiverAddr = frame + 4;  // Adresse 1
+        const uint8_t *senderAddr = frame + 10;  // Adresse 2
+        // Affichage sur le port série
+        Serial.println("-------------------");
+        Serial.println("Deauth Packet detected !!! :");
+        Serial.print("CH: ");
+        Serial.println(ctrl.channel);
+        Serial.print("RSSI: ");
+        Serial.println(ctrl.rssi);
+        Serial.print("Sender: "); printAddress(senderAddr);
+        Serial.print("Receiver: "); printAddress(receiverAddr);
+        Serial.println();
+
+        // Affichage sur l'écran
+        M5.Lcd.setTextColor(WHITE, BLACK);
+        M5.Lcd.setCursor(0, 64);
+        M5.Lcd.printf("Deauth Detected!");
+        M5.Lcd.setCursor(0, 85);
+        M5.Lcd.printf("CH: %d RSSI: %d  ", ctrl.channel, ctrl.rssi);
+        M5.Lcd.setCursor(0, 106);
+        M5.Lcd.print("Send: "); printAddressLCD(senderAddr);
+        M5.Lcd.setCursor(0, 127);
+        M5.Lcd.print("Receive: "); printAddressLCD(receiverAddr);
+        nombreDeDeauth++;
+        if (nombreDeDeauth < 999) {
+            M5.Lcd.setCursor(200, 54);
+        } else {
+            M5.Lcd.setCursor(188, 54);
+        }
+        M5.Lcd.printf("DEAUTH:");
+        M5.Lcd.print(nombreDeDeauth);
     }
 }
 
@@ -2994,6 +3067,14 @@ void deauthDetect() {
     M5.Lcd.setCursor(x_btnC, y_btns);
     M5.Lcd.println("Next");
 
+    if (!SD.exists("/handshakes")) {
+        if (SD.mkdir("/handshakes")) {
+            Serial.println("/handshakes folder created");
+        } else {
+            Serial.println("Fail to create /handshakes folder");
+            return;
+        }
+    }
 
     while (!btnBPressed) {
         M5.update(); // Mettre à jour l'état des boutons
@@ -3052,6 +3133,130 @@ void deauthDetect() {
     autoChannelHop = !autoChannelHop;
     ui.waitAndReturnToMenu("Stop detection...");
 }
+
+// sniff pcap
+bool estUnPaquetEAPOL(const wifi_promiscuous_pkt_t* packet) {
+    const uint8_t *payload = packet->payload;
+    int len = packet->rx_ctrl.sig_len;
+
+    // length check to ensure packet is large enough for EAPOL (minimum length)
+    if (len < (24 + 8 + 4)) { // 24 bytes for the MAC header, 8 for LLC/SNAP, 4 for EAPOL minimum
+        return false;
+    }
+
+    // check for LLC/SNAP header indicating EAPOL payload
+    // LLC: AA-AA-03, SNAP: 00-00-00-88-8E for EAPOL
+    if (payload[24] == 0xAA && payload[25] == 0xAA && payload[26] == 0x03 &&
+        payload[27] == 0x00 && payload[28] == 0x00 && payload[29] == 0x00 &&
+        payload[30] == 0x88 && payload[31] == 0x8E) {
+        return true;
+    }
+
+    // handle QoS tagging which shifts the start of the LLC/SNAP headers by 2 bytes
+    // check if the frame control field's subtype indicates a QoS data subtype (0x08)
+    if ((payload[0] & 0x0F) == 0x08) {
+        // Adjust for the QoS Control field and recheck for LLC/SNAP header
+        if (payload[26] == 0xAA && payload[27] == 0xAA && payload[28] == 0x03 &&
+            payload[29] == 0x00 && payload[30] == 0x00 && payload[31] == 0x00 &&
+            payload[32] == 0x88 && payload[33] == 0x8E) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+
+// Définition de l'en-tête de fichier PCAP global
+typedef struct pcap_hdr_s {
+    uint32_t magic_number;   /* numéro magique */
+    uint16_t version_major;  /* numéro de version majeur */
+    uint16_t version_minor;  /* numéro de version mineur */
+    int32_t  thiszone;       /* correction de l'heure locale */
+    uint32_t sigfigs;        /* précision des timestamps */
+    uint32_t snaplen;        /* taille max des paquets capturés, en octets */
+    uint32_t network;        /* type de données de paquets */
+} pcap_hdr_t;
+
+// Définition de l'en-tête d'un paquet PCAP
+typedef struct pcaprec_hdr_s {
+    uint32_t ts_sec;         /* timestamp secondes */
+    uint32_t ts_usec;        /* timestamp microsecondes */
+    uint32_t incl_len;       /* nombre d'octets du paquet enregistrés dans le fichier */
+    uint32_t orig_len;       /* longueur réelle du paquet */
+} pcaprec_hdr_t;
+
+
+void ecrireEntetePCAP(File &file) {
+    pcap_hdr_t pcap_header;
+    pcap_header.magic_number = 0xa1b2c3d4;
+    pcap_header.version_major = 2;
+    pcap_header.version_minor = 4;
+    pcap_header.thiszone = 0;
+    pcap_header.sigfigs = 0;
+    pcap_header.snaplen = 65535;
+    pcap_header.network = 105; // LINKTYPE_IEEE802_11
+
+    file.write((const byte*)&pcap_header, sizeof(pcap_hdr_t));
+    nombreDeHandshakes++;
+}
+
+void enregistrerDansFichierPCAP(const wifi_promiscuous_pkt_t* packet, bool haveBeacon) {
+    // Construire le nom du fichier en utilisant les adresses MAC de l'AP et du client
+    const uint8_t *addr1 = packet->payload + 4;  // Adresse du destinataire (Adresse 1)
+    const uint8_t *addr2 = packet->payload + 10; // Adresse de l'expéditeur (Adresse 2)
+    const uint8_t *bssid = packet->payload + 16; // Adresse BSSID (Adresse 3)
+    const uint8_t *apAddr;
+
+    if (memcmp(addr1, bssid, 6) == 0) {
+        apAddr = addr1;
+    } else {
+        apAddr = addr2;
+    }
+
+    char nomFichier[50];
+    sprintf(nomFichier, "/handshakes/HS_%02X%02X%02X%02X%02X%02X.pcap",
+    apAddr[0], apAddr[1], apAddr[2], apAddr[3], apAddr[4], apAddr[5]);
+
+    // Vérifier si le fichier existe déjà
+    bool fichierExiste = SD.exists(nomFichier);
+
+    // Si probe est true et que le fichier n'existe pas, ignorer l'enregistrement
+    if (haveBeacon && !fichierExiste) {
+        return;
+    }
+
+    // Ouvrir le fichier en mode ajout si existant sinon en mode écriture
+    File fichierPcap = SD.open(nomFichier, fichierExiste ? FILE_APPEND : FILE_WRITE);
+    if (!fichierPcap) {
+        Serial.println("Échec de l'ouverture du fichier PCAP");
+        return;
+    }
+
+    if (!haveBeacon && !fichierExiste) {
+        Serial.println("Écriture de l'en-tête global du fichier PCAP");
+        ecrireEntetePCAP(fichierPcap);
+    }
+
+    if (haveBeacon && fichierExiste) {
+        String bssidStr = String((char*)apAddr, 6);
+        if (registeredBeacons.find(bssidStr) != registeredBeacons.end()) {
+            return; // Beacon déjà enregistré pour ce BSSID
+        }
+        registeredBeacons.insert(bssidStr); // Ajouter le BSSID à l'ensemble
+    }
+
+    // Écrire l'en-tête du paquet et le paquet lui-même dans le fichier
+    pcaprec_hdr_t pcap_packet_header;
+    pcap_packet_header.ts_sec = packet->rx_ctrl.timestamp / 1000000;
+    pcap_packet_header.ts_usec = packet->rx_ctrl.timestamp % 1000000;
+    pcap_packet_header.incl_len = packet->rx_ctrl.sig_len;
+    pcap_packet_header.orig_len = packet->rx_ctrl.sig_len;
+    fichierPcap.write((const byte*)&pcap_packet_header, sizeof(pcaprec_hdr_t));
+    fichierPcap.write(packet->payload, packet->rx_ctrl.sig_len);
+    fichierPcap.close();
+}
+//sniff pcap end
 
 
 // Wof part // from a really cool idea of Kiyomi // https://github.com/K3YOMI/Wall-of-Flippers
@@ -3130,6 +3335,15 @@ class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
         if (!advData.empty()) {
             const uint8_t* payload = reinterpret_cast<const uint8_t*>(advData.data());
             size_t length = advData.length();
+
+/*
+            Serial.print("Raw Data: ");
+            for (size_t i = 0; i < length; i++) {
+                Serial.printf("%02X", payload[i]); // Afficher chaque octet en hexadécimal
+            }
+            Serial.println(); // Nouvelle ligne après les données brutes
+*/
+
             for(auto& packet : forbiddenPackets) {
                 if(matchPattern(packet.pattern, payload, length)) {
                     if (lineCount >= maxLines) {
