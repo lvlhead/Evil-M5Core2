@@ -36,6 +36,8 @@
 #include <SD.h>
 #include <M5Unified.h>
 
+#include "evil-util.h"
+
 class EvilConfig {
   public:
     EvilConfig();

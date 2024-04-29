@@ -54,13 +54,13 @@ void EvilConfig::restoreConfigParameter(String key) {
             configFile.close();
             if (key == "brightness") {
                 M5.Display.setBrightness(value);
-                //sendMessage("Brightness restored to " + String(value));
+                sendMessage("Brightness restored to " + String(value));
             }
         } else {
-            //sendMessage("Error when opening config.txt");
+            sendMessage("Error when opening config.txt");
         }
     } else {
-        //sendMessage("Config file not found, using default value");
+        sendMessage("Config file not found, using default value");
         if (key == "brightness") {
             M5.Display.setBrightness(defaultBrightness);
         }
@@ -80,7 +80,7 @@ bool EvilConfig::saveConfigParameter(String key, int value) {
         }
         configFile.close();
     } else {
-        //sendMessage("Error when opening config.txt for reading");
+        sendMessage("Error when opening config.txt for reading");
         return false;
     }
 
@@ -97,10 +97,10 @@ bool EvilConfig::saveConfigParameter(String key, int value) {
     if (configFile) {
         configFile.print(content);
         configFile.close();
-        //sendMessage(key + " saved!");
+        sendMessage(key + " saved!");
         return true;
     } else {
-        //sendMessage("Error when opening config.txt for writing");
+        sendMessage("Error when opening config.txt for writing");
         return false;
     }
 }
@@ -109,7 +109,7 @@ bool EvilConfig::readConfigFile() {
     whitelist.clear();
     File configFile = SD.open(configFilePath);
     if (!configFile) {
-        //sendMessage("Failed to open config file");
+        sendMessage("Failed to open config file");
         return false;
     }
 
@@ -138,7 +138,7 @@ std::vector<String> EvilConfig::readCustomProbes() {
     std::vector<String> customProbes;
 
     if (!file) {
-        //sendMessage("Failed to open file for reading");
+        sendMessage("Failed to open file for reading");
         return customProbes;
     }
 
