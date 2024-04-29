@@ -71,6 +71,7 @@ extern "C" {
 #include "evil-monitor.h"
 #include "evil-util.h"
 #include "evil-wardriving.h"
+#include "evil-wof.h"
 #include "evil-wireless.h"
 
 // Initialize modules
@@ -81,6 +82,7 @@ EvilBeacon beacon;
 EvilMonitor monitor;
 EvilWardrive wardrive;
 EvilWireless wireless;
+EvilWoF flipper;
 
 // Set up Menu objects
 Menu mainMenu("Main Menu");
@@ -459,6 +461,7 @@ void setup() {
     mainMenu.addMenuItem("Change Portal", stopCaptivePortal);
     mainMenu.addMenuItem("Wardriving", wardrive.emptyWardriveCallback, showWardriveMode);
     mainMenu.addMenuItem("Beacon Spam", beacon.emptyBeaconCallback, showBeaconAttack);
+    mainMenu.addMenuItem("Wall of Flipper", flipper.emptyWoFCallback, showWoFScanner);
     mainMenu.addSubMenu("Settings", &subMenuSettings);
 
     // Define Settings Menu
@@ -470,8 +473,8 @@ void setup() {
     subMenuSettings.addMenuItem("Delete All Probes", deleteAllProbes);
 
     // Customize the menu layouts, currently to set menu width/height
-    customizeLayout(mainMenu.getLayout());
-    customizeLayout(subMenuSettings.getLayout());
+    //customizeLayout(mainMenu.getLayout());
+    //customizeLayout(subMenuSettings.getLayout());
 
     // TODO: Remove random initialization of global variables
     currentClonedSSID = "Evil-M5Core2";
@@ -483,9 +486,6 @@ void setup() {
 
 
 void customizeLayout(Layout& layout) {
-    layout.SCREEN_WIDTH = M5.Display.width();
-    layout.SCREEN_HEIGHT = M5.Display.height();
-/*
     // smaller font
     layout.MENU_FONT_SIZE = 1;
 
@@ -502,7 +502,6 @@ void customizeLayout(Layout& layout) {
     layout.BOTTOM_BAR_BACKGROUND_COLOR = DARKGREY;
     layout.BOTTOM_BAR_SOFTKEY_COLOR = WHITE;
     layout.BOTTOM_BAR_SOFTKEY_BACKGROUND_COLOR = DARKGREY;
-*/
 }
 
 
@@ -560,6 +559,17 @@ void showBeaconAttack(CallbackMenuItem& menuItem) {
     if (M5.BtnB.wasReleased()) {
         // Close app and return to main menu
         beacon.closeBeaconApp();
+        menuItem.deactivateCallbacks();
+    }
+}
+
+// Wall of Flipper Scanner
+void showWoFScanner(CallbackMenuItem& menuItem) {
+    flipper.showWoFApp();
+
+    if (M5.BtnB.wasReleased()) {
+        // Close app and return to main menu
+        flipper.closeWoFApp();
         menuItem.deactivateCallbacks();
     }
 }
@@ -3257,177 +3267,3 @@ void enregistrerDansFichierPCAP(const wifi_promiscuous_pkt_t* packet, bool haveB
     fichierPcap.close();
 }
 //sniff pcap end
-
-
-// Wof part // from a really cool idea of Kiyomi // https://github.com/K3YOMI/Wall-of-Flippers
-unsigned long lastFlipperFoundMillis = 0;
-static bool isBLEInitialized = false;
-
-struct ForbiddenPacket {
-    const char* pattern;
-    const char* type;
-};
-
-std::vector<ForbiddenPacket> forbiddenPackets = {
-    {"4c0007190_______________00_____", "APPLE_DEVICE_POPUP"}, // not working ?
-    {"4c000f05c0_____________________", "APPLE_ACTION_MODAL"}, // refactored for working
-    {"4c00071907_____________________", "APPLE_DEVICE_CONNECT"}, // working
-    {"4c0004042a0000000f05c1__604c950", "APPLE_DEVICE_SETUP"}, // working
-    {"2cfe___________________________", "ANDROID_DEVICE_CONNECT"}, // not working cant find raw data in sniff
-    {"750000000000000000000000000000_", "SAMSUNG_BUDS_POPUP"},// refactored for working
-    {"7500010002000101ff000043_______", "SAMSUNG_WATCH_PAIR"},//working
-    {"0600030080_____________________", "WINDOWS_SWIFT_PAIR"},//working
-    {"ff006db643ce97fe427c___________", "LOVE_TOYS"} // working
-};
-
-bool matchPattern(const char* pattern, const uint8_t* payload, size_t length) {
-    size_t patternLength = strlen(pattern);
-    for(size_t i = 0, j = 0; i < patternLength && j < length; i+=2, j++) {
-        char byteString[3] = {pattern[i], pattern[i+1], 0};
-        if(byteString[0] == '_' && byteString[1] == '_') continue;
-
-        uint8_t byteValue = strtoul(byteString, nullptr, 16);
-        if(payload[j] != byteValue) return false;
-    }
-    return true;
-}
-
-class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
-    int lineCount = 0;
-    const int maxLines = 10;
-    void onResult(BLEAdvertisedDevice advertisedDevice) override {
-        String deviceColor = "Unknown"; // Défaut
-        bool isValidMac = false; // validité de l'adresse MAC
-        bool isFlipper = false; // Flag pour identifier si le dispositif est un Flipper
-
-        // Vérifier directement les UUIDs pour déterminer la couleur
-        if (advertisedDevice.isAdvertisingService(BLEUUID("00003082-0000-1000-8000-00805f9b34fb"))) {
-            deviceColor = "White";
-            isFlipper = true;
-        } else if (advertisedDevice.isAdvertisingService(BLEUUID("00003081-0000-1000-8000-00805f9b34fb"))) {
-            deviceColor = "Black";
-            isFlipper = true;
-        } else if (advertisedDevice.isAdvertisingService(BLEUUID("00003083-0000-1000-8000-00805f9b34fb"))) {
-            deviceColor = "Transparent";
-            isFlipper = true;
-        }
-
-        // Continuer uniquement si un Flipper est identifié
-        if (isFlipper) {
-            String macAddress = advertisedDevice.getAddress().toString().c_str();
-            if (macAddress.startsWith("80:e1:26") || macAddress.startsWith("80:e1:27")) {
-                isValidMac = true;
-            }
-
-            M5.Lcd.setTextColor(TFT_WHITE, TFT_BLACK);
-            M5.Display.setCursor(0, 10);
-            String name = advertisedDevice.getName().c_str();
-
-            M5.Display.printf("Name: %s\nRSSI: %d \nMAC: %s\n",
-            name.c_str(),
-            advertisedDevice.getRSSI(),
-            macAddress.c_str());
-            recordFlipper(name, macAddress, deviceColor, isValidMac); // Passer le statut de validité de l'adresse MAC
-            lastFlipperFoundMillis = millis();
-        }
-
-        std::string advData = advertisedDevice.getManufacturerData();
-        if (!advData.empty()) {
-            const uint8_t* payload = reinterpret_cast<const uint8_t*>(advData.data());
-            size_t length = advData.length();
-
-/*
-            Serial.print("Raw Data: ");
-            for (size_t i = 0; i < length; i++) {
-                Serial.printf("%02X", payload[i]); // Afficher chaque octet en hexadécimal
-            }
-            Serial.println(); // Nouvelle ligne après les données brutes
-*/
-
-            for(auto& packet : forbiddenPackets) {
-                if(matchPattern(packet.pattern, payload, length)) {
-                    if (lineCount >= maxLines) {
-                        M5.Display.fillRect(0, 58, 325, 185, BLACK); // Réinitialiser la zone d'affichage des paquets interdits
-                        M5.Display.setCursor(0, 59);
-                        lineCount = 0; // Réinitialiser si le maximum est atteint
-                    }
-                    M5.Display.printf("%s\n", packet.type);
-                    lineCount++;
-                    break;
-                }
-            }
-        }
-    }
-};
-
-bool isMacAddressRecorded(const String& macAddress) {
-    File file = openFile("/WoF.txt", FILE_READ);
-    if (!file) {
-        return false;
-    }
-    while (file.available()) {
-        String line = file.readStringUntil('\n');
-        if (line.indexOf(macAddress) >= 0) {
-            file.close();
-            return true;
-        }
-    }
-
-    file.close();
-    return false;
-}
-
-void recordFlipper(const String& name, const String& macAddress, const String& color, bool isValidMac) {
-    if (!isMacAddressRecorded(macAddress)) {
-        File file = openFile("/WoF.txt", FILE_APPEND);
-        if (file) {
-            String status = isValidMac ? " - normal" : " - spoofed"; // Détermine le statut basé sur isValidMac
-            file.println(name + " - " + macAddress + " - " + color + status);
-            sendMessage("Flipper saved: \n" + name + " - " + macAddress + " - " + color + status);
-        }
-        file.close();
-    }
-}
-
-void initializeBLEIfNeeded() {
-    if (!isBLEInitialized) {
-        BLEDevice::init("");
-        isBLEInitialized = true;
-        sendMessage("BLE initialized for scanning.");
-    }
-}
-
-
-void wallOfFlipper(){
-    bool btnBPressed = false; //debounce
-    ui.writeMessageXY("Waiting for Flipper", 0, 10, false);
-
-    M5.Lcd.setCursor(140, 220);
-    M5.Lcd.println("Stop");
-    initializeBLEIfNeeded();
-    delay(200);
-    while (!btnBPressed) {
-        M5.update(); // Mettre à jour l'état des boutons
-        // Gestion du bouton B pour basculer entre le mode auto et statique
-        if (M5.BtnB.isPressed()) {
-            unsigned long currentPressTime = millis();
-            if (currentPressTime - lastBtnBPressTime > debounceDelay) {
-                lastBtnBPressTime = currentPressTime;
-                btnBPressed = true; // Mettre à jour le drapeau pour indiquer que le bouton B a été pressé après le debounce
-            }
-        }
-        if (millis() - lastFlipperFoundMillis > 10000) { // 30000 millisecondes = 30 secondes
-            ui.writeMessageXY("Waiting for Flipper", 0, 10, false);
-            M5.Lcd.setCursor(140, 220);
-            M5.Lcd.println("Stop");
-
-            lastFlipperFoundMillis = millis();
-        }
-        BLEScan* pBLEScan = BLEDevice::getScan();
-        pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks(), true);
-        pBLEScan->setActiveScan(true);
-        pBLEScan->start(1, false);
-    }
-    ui.waitAndReturnToMenu("Stop detection...");
-}
-// Wof part end
