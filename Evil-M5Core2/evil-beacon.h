@@ -49,6 +49,7 @@ class EvilBeacon {
     static void emptyBeaconCallback(CallbackMenuItem& menuItem);
     void beaconAttack();
     void toggleAppRunning();
+    bool getAppRunning();
 
   private:
     EvilUI ui;

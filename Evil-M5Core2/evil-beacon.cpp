@@ -87,6 +87,10 @@ void EvilBeacon::toggleAppRunning() {
     isAppRunning = !isAppRunning;
 }
 
+bool EvilBeacon::getAppRunning() {
+    return isAppRunning;
+}
+
 void EvilBeacon::beaconAttack() {
     std::vector<String> messages;
     messages.push_back("Beacon Spam running...");
