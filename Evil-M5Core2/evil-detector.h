@@ -60,6 +60,7 @@ class EvilDetector {
     EvilUI ui;
     EvilWireless wireless;
     bool isAppRunning;
+    bool updateScreen;
     void displayPwnagotchiDetails(const String& name, const String& pwndnb);
     void printAddress(const uint8_t* addr);
     void printAddressLCD(const uint8_t* addr);

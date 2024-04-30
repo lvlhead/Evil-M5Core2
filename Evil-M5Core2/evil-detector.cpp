@@ -57,6 +57,7 @@ typedef struct pcaprec_hdr_s {
 } pcaprec_hdr_t;
 
 EvilDetector::EvilDetector() {
+    updateScreen = true;
     channelHopInterval = 5000;
     lastChannelHopTime = 0;
     currentChannelDeauth = 1;
@@ -99,7 +100,7 @@ void EvilDetector::showDetectorApp() {
         WiFi.mode(WIFI_STA);
         esp_wifi_start();
         esp_wifi_set_promiscuous(true);
-        //esp_wifi_set_promiscuous_rx_cb(snifferCallback);
+        esp_wifi_set_promiscuous_rx_cb(snifferCallback);
         esp_wifi_set_channel(currentChannelDeauth, WIFI_SECOND_CHAN_NONE);
 
         if (!SD.exists("/handshakes")) {
@@ -147,24 +148,29 @@ void EvilDetector::incrementChannel(int count) {
 }
 
 void EvilDetector::deauthDetect() {
-        if (autoChannelHop) {
-            unsigned long currentTime = millis();
-            if (currentTime - lastChannelHopTime > channelHopInterval) {
-                lastChannelHopTime = currentTime;
-                incrementChannel(1);
-            }
+    if (autoChannelHop) {
+        unsigned long currentTime = millis();
+        if (currentTime - lastChannelHopTime > channelHopInterval) {
+            lastChannelHopTime = currentTime;
+            incrementChannel(1);
         }
+    }
 
-        if (currentChannelDeauth != lastDisplayedChannelDeauth || autoChannelHop != lastDisplayedMode) {
-            ui.writeMessageXY("Channel: " + currentChannelDeauth, 0, 16, false);
-            lastDisplayedChannelDeauth = currentChannelDeauth;
-        }
+    if (currentChannelDeauth != lastDisplayedChannelDeauth || autoChannelHop != lastDisplayedMode) {
+        updateScreen = true;
+    }
 
-        if (autoChannelHop != lastDisplayedMode) {
-            String channelType = autoChannelHop ? "Auto" : "Static";
-            ui.writeMessageXY("Mode: " + channelType, 0, 37, false);
-            lastDisplayedMode = autoChannelHop;
-        }
+    if (autoChannelHop != lastDisplayedMode) {
+        lastDisplayedMode = autoChannelHop;
+        updateScreen = true;
+    }
+
+    if (updateScreen) {
+        String channelType = autoChannelHop ? "Auto" : "Static";
+        ui.writeMessageXY("Mode: " + channelType, 10, 37, false);
+        ui.writeMessageXY("Channel: " + String(currentChannelDeauth), 10, 16, false);
+        updateScreen = false;
+    }
 }
 
 bool EvilDetector::estUnPaquetEAPOL(const wifi_promiscuous_pkt_t* packet) {
