@@ -87,6 +87,7 @@ EvilWoF flipper;
 // Set up Menu objects
 Menu mainMenu("Main Menu");
 Menu subMenuSettings("Settings");
+Menu subMenuWifiList("Wifi List");
 
 // Web and DNS Servers
 WebServer server(80);
@@ -182,6 +183,7 @@ File pcapFile;
 
 String ssidList[100];
 
+int networkIndex;
 int currentListIndex = 0;
 int topVisibleIndex = 0;
 
@@ -454,8 +456,8 @@ void setup() {
 
     // Define Main Menu
     mainMenu.addMenuItem("Scan WiFi", scanWifiNetworks);
-    mainMenu.addMenuItem("Select Network", showWifiList);
-    mainMenu.addMenuItem("Clone & Details", showWifiList);
+    mainMenu.addSubMenu("Select Network", &subMenuWifiList);
+    mainMenu.addMenuItem("Clone & Details", emptyWifiDetailCallback, showWifiDetailSelect);
     mainMenu.addMenuItem("Start Captive Portal", createCaptivePortal);
     mainMenu.addMenuItem("Stop Captive Portal", stopCaptivePortal);
     mainMenu.addMenuItem("Change Portal", stopCaptivePortal);
@@ -524,6 +526,16 @@ void loop() {
 void scanWifiNetworks(CallbackMenuItem& menuItem) {
     ui.writeSingleMessage("Scan in progress...", true);
     wireless.firstScanWifiNetworks();
+    for (int i = 0; i < wireless.getNumSSID(); i++) {
+        subMenuWifiList.addMenuItem(ssidList[i], [](CallbackMenuItem& menuItem) {
+            currentListIndex = menuItem.getPosition() - 1;
+            sendMessage("-------------------");
+            sendMessage("SSID " +ssidList[currentListIndex] + " selected");
+            sendMessage("-------------------");
+            ui.waitAndReturnToMenu(ssidList[currentListIndex] + " selected");
+            menuItem.deactivateCallbacks(); // TODO: This does not drop us out of the menu
+        });
+    }
     ui.waitAndReturnToMenu("Scan Completed");
 }
 
@@ -625,6 +637,57 @@ void showBrightnessAdjust(CallbackMenuItem& menuItem) {
         M5.Display.setBrightness(currentBrightness);
     }
 }
+
+// Clone & Details
+void emptyWifiDetailCallback(CallbackMenuItem& menuItem) {
+    M5.Display.clear();
+    networkIndex = currentListIndex;
+    menuItem.getMenu()->displaySoftKey(BtnASlot, "Prev");
+    menuItem.getMenu()->displaySoftKey(BtnBSlot, "Next");
+    menuItem.getMenu()->displaySoftKey(BtnCSlot, "Clone");
+}
+
+void showWifiDetailSelect(CallbackMenuItem& menuItem) {
+    int channel = WiFi.channel(networkIndex);
+    String security = wireless.getWifiSecurity(networkIndex);
+    int32_t rssi = WiFi.RSSI(networkIndex);
+    uint8_t* bssid = WiFi.BSSID(networkIndex);
+    String macAddress = bssidToString(bssid);
+
+    if (ui.clearScreenDelay()) {
+        std::vector<String> messages;
+        messages.push_back("SSID: " + (ssidList[networkIndex].length() > 0 ? ssidList[networkIndex] : "N/A"));
+        messages.push_back("Channel: " + (channel > 0 ? String(channel) : "N/A"));
+        messages.push_back("Security: " + (security.length() > 0 ? security : "N/A"));
+        messages.push_back("Signal: " + (rssi != 0 ? String(rssi) + " dBm" : "N/A"));
+        messages.push_back("MAC: " + (macAddress.length() > 0 ? macAddress : "N/A"));
+        ui.writeVectorMessage(messages, 10, 10, 20);
+
+        sendMessage("------Wifi-Info----");
+        sendMessage("SSID: " + ssidList[networkIndex]);
+        sendMessage("Channel: " + String(WiFi.channel(networkIndex)));
+        sendMessage("Security: " + security);
+        sendMessage("Signal: " + String(rssi) + " dBm");
+        sendMessage("MAC: " + macAddress);
+        sendMessage("-------------------");
+    }
+
+    if (M5.BtnA.wasReleased()) {
+        // Select Previous SSID
+        networkIndex = (networkIndex - 1 + wireless.getNumSSID()) % wireless.getNumSSID();
+    } else if (M5.BtnB.wasReleased()) {
+        // Select Next SSID
+        networkIndex = (networkIndex + 1) % wireless.getNumSSID();
+    } else if (M5.BtnC.wasReleased()) {
+        // Clone and Exit
+        currentClonedSSID = ssidList[networkIndex];
+        ui.setInMenu(true);
+        ui.waitAndReturnToMenu(ssidList[networkIndex] + " Cloned...");
+        sendMessage(ssidList[networkIndex] + " Cloned...");
+        menuItem.deactivateCallbacks();
+    }
+}
+
 
 void deleteCredentials(CallbackMenuItem& menuItem) {
     if (ui.confirmPopup("Delete credentials?", true)) {
@@ -938,133 +1001,6 @@ void changePortal(int index) {
 }
 
 
-void showWifiList(CallbackMenuItem& menuItem) {
-    const int listDisplayLimit = M5.Display.height() / 18;
-    int listStartIndex = max(0, min(currentListIndex, wireless.getNumSSID() - listDisplayLimit));
-
-    M5.Display.clear();
-    M5.Display.setTextSize(2);
-    for (int i = listStartIndex; i < min(wireless.getNumSSID(), listStartIndex + listDisplayLimit + 1); i++) {
-        if (i == currentListIndex) {
-            M5.Display.fillRect(0, (i - listStartIndex) * 18, M5.Display.width(), 18, TFT_NAVY);
-            M5.Display.setTextColor(TFT_GREEN);
-        } else {
-            M5.Display.setTextColor(TFT_WHITE);
-        }
-        M5.Display.setCursor(10, (i - listStartIndex) * 18);
-        M5.Display.println(ssidList[i]);
-    }
-    M5.Display.display();
-
-    while (!ui.getInMenu()) {
-        M5.update();
-        handleDnsRequestSerial();
-        if (M5.BtnA.wasPressed()) {
-            currentListIndex--;
-            if (currentListIndex < 0) {
-                currentListIndex = wireless.getNumSSID() - 1;
-            }
-            //showWifiList();
-        } else if (M5.BtnC.wasPressed()) {
-            currentListIndex++;
-            if (currentListIndex >= wireless.getNumSSID()) {
-                currentListIndex = 0;
-            }
-            //showWifiList();
-        } else if (M5.BtnB.wasPressed()) {
-            ui.setInMenu(true);
-            sendMessage("-------------------");
-            sendMessage("SSID " +ssidList[currentListIndex] + " selected");
-            sendMessage("-------------------");
-            ui.waitAndReturnToMenu(ssidList[currentListIndex] + " selected");
-        }
-    }
-}
-
-
-void showWifiDetails(int &networkIndex) {
-    ui.setInMenu(false);
-
-    auto updateDisplay = [&](){
-        if (networkIndex >= 0 && networkIndex < wireless.getNumSSID()) {
-            M5.Display.clear();
-            M5.Display.setTextSize(2);
-            int y = 10;
-
-            // SSID
-            M5.Display.setCursor(10, y);
-            M5.Display.println("SSID: " + (ssidList[networkIndex].length() > 0 ? ssidList[networkIndex] : "N/A"));
-            y += 40;
-
-            // Channel
-            int channel = WiFi.channel(networkIndex);
-            M5.Display.setCursor(10, y);
-            M5.Display.println("Channel: " + (channel > 0 ? String(channel) : "N/A"));
-            y += 20;
-
-            // Security
-            String security = wireless.getWifiSecurity(networkIndex);
-            M5.Display.setCursor(10, y);
-            M5.Display.println("Security: " + (security.length() > 0 ? security : "N/A"));
-            y += 20;
-
-            // Signal Strength
-            int32_t rssi = WiFi.RSSI(networkIndex);
-            M5.Display.setCursor(10, y);
-            M5.Display.println("Signal: " + (rssi != 0 ? String(rssi) + " dBm" : "N/A"));
-            y += 20;
-
-            // MAC Address
-            uint8_t* bssid = WiFi.BSSID(networkIndex);
-            String macAddress = bssidToString(bssid);
-            M5.Display.setCursor(10, y);
-            M5.Display.println("MAC: " + (macAddress.length() > 0 ? macAddress : "N/A"));
-            y += 20;
-
-            M5.Display.setCursor(35, 220);
-            M5.Display.println("Next");
-            M5.Display.setCursor(140, 220);
-            M5.Display.println("Back");
-            M5.Display.setCursor(238, 220);
-            M5.Display.println("Clone");
-
-            M5.Display.display();
-            sendMessage("------Wifi-Info----");
-            sendMessage("SSID: " + ssidList[networkIndex]);
-            sendMessage("Channel: " + String(WiFi.channel(networkIndex)));
-            sendMessage("Security: " + security);
-            sendMessage("Signal: " + String(rssi) + " dBm");
-            sendMessage("MAC: " + macAddress);
-            sendMessage("-------------------");
-        }
-    };
-
-    updateDisplay();
-
-    while (!ui.getInMenu()) {
-        M5.update();
-        handleDnsRequestSerial();
-
-        if (M5.BtnC.wasPressed()) {
-            currentClonedSSID = ssidList[networkIndex];
-            ui.setInMenu(true);
-            ui.waitAndReturnToMenu(ssidList[networkIndex] + " Cloned...");
-            sendMessage(ssidList[networkIndex] + " Cloned...");
-            break; // Sortir de la boucle
-        } else if (M5.BtnA.wasPressed()) {
-            networkIndex = (networkIndex + 1) % wireless.getNumSSID();
-            updateDisplay();
-        } else if (M5.BtnB.wasPressed()) {
-            ui.setInMenu(true);
-            break;
-        } else if (M5.BtnPWR.wasClicked()) {
-            networkIndex = (networkIndex - 1 + wireless.getNumSSID()) % wireless.getNumSSID();
-            updateDisplay();
-        }
-    }
-}
-
-
 String bssidToString(uint8_t* bssid) {
     char mac[18];
     snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X",
@@ -1225,7 +1161,7 @@ void createCaptivePortal(CallbackMenuItem& menuItem) {
     led.pattern3();
 #endif
     if (!isProbeKarmaAttackMode && !isAutoKarmaActive) {
-        ui.waitAndReturnToMenu("Portal" + ssid + "Deployed");
+        ui.waitAndReturnToMenu("Portal\n" + ssid + "\nDeployed");
     }
 }
 
