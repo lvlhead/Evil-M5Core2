@@ -100,7 +100,7 @@ void EvilDetector::showDetectorApp() {
         WiFi.mode(WIFI_STA);
         esp_wifi_start();
         esp_wifi_set_promiscuous(true);
-        esp_wifi_set_promiscuous_rx_cb(snifferCallback);
+        //esp_wifi_set_promiscuous_rx_cb(snifferCallback);
         esp_wifi_set_channel(currentChannelDeauth, WIFI_SECOND_CHAN_NONE);
 
         if (!SD.exists("/handshakes")) {

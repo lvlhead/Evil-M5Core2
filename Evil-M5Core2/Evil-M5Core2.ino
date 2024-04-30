@@ -520,6 +520,7 @@ void scanWifiNetworks(CallbackMenuItem& menuItem) {
             sendMessage("SSID " +ssidList[currentListIndex] + " selected");
             sendMessage("-------------------");
             ui.waitAndReturnToMenu(ssidList[currentListIndex] + " selected");
+            Serial.println(menuItem.getText()); // TODO: This prints the selected option
             menuItem.deactivateCallbacks(); // TODO: This does not drop us out of the menu
         });
     }
@@ -686,7 +687,7 @@ void showWifiDetailSelect(CallbackMenuItem& menuItem) {
     } else if (M5.BtnC.wasReleased()) {
         // Clone and Exit
         currentClonedSSID = ssidList[networkIndex];
-        ui.setInMenu(true);
+        //ui.setInMenu(true);
         ui.waitAndReturnToMenu(ssidList[networkIndex] + " Cloned...");
         sendMessage(ssidList[networkIndex] + " Cloned...");
         menuItem.deactivateCallbacks();
@@ -804,7 +805,7 @@ void checkSerialCommands(String command, bool fromBluetooth) {
 
     if (connectionState == AUTHENTICATED || !fromBluetooth) {
         if (command == "scan_wifi") {
-            ui.setOperationInProgress();
+            //ui.setOperationInProgress();
             //scanWifiNetworks();
             sendMessage("-------------------");
             sendMessage("Near Wifi Network : ");
@@ -879,7 +880,7 @@ void checkSerialCommands(String command, bool fromBluetooth) {
             sendMessage("-------------------");
             sendMessage(status);
         } else if (command == "probe_attack") {
-            ui.setOperationInProgress();
+            //ui.setOperationInProgress();
             isItSerialCommand = true;
             probeAttack();
             delay(200);
@@ -895,7 +896,7 @@ void checkSerialCommands(String command, bool fromBluetooth) {
                 sendMessage("-------------------");
             }
         } else if (command == "probe_sniffing") {
-            ui.setOperationInProgress();
+            //ui.setOperationInProgress();
             probeSniffing();
             delay(200);
         } else if (command == "stop_probe_sniffing") {
@@ -910,7 +911,7 @@ void checkSerialCommands(String command, bool fromBluetooth) {
             int index = command.substring(String("select_probes ").length()).toInt();
             selectProbeSerial(index);
         } else if (command == "karma_auto") {
-            ui.setOperationInProgress();
+            //ui.setOperationInProgress();
             startAutoKarma();
             delay(200);
         } else if (command == "exit") {
@@ -1511,7 +1512,7 @@ void changePortal() {
     const int listDisplayLimit = M5.Display.height() / 18;
     bool needDisplayUpdate = true;
 
-    while (!ui.getInMenu()) {
+//    while (!ui.getInMenu()) {
         if (needDisplayUpdate) {
             int listStartIndex = max(0, min(portalFileIndex, numPortalFiles - listDisplayLimit));
 
@@ -1543,7 +1544,7 @@ void changePortal() {
             needDisplayUpdate = true;
         } else if (M5.BtnB.wasPressed()) {
             selectedPortalFile = portalFiles[portalFileIndex];
-            ui.setInMenu(true);
+            //ui.setInMenu(true);
             sendMessage("-------------------");
             sendMessage(selectedPortalFile.substring(7) + " portal selected.");
             sendMessage("-------------------");
@@ -1552,7 +1553,7 @@ void changePortal() {
 #endif
             ui.waitAndReturnToMenu(selectedPortalFile.substring(7) + " selected");
         }
-    }
+//    }
 }
 
 
@@ -1603,7 +1604,7 @@ void checkCredentials(CallbackMenuItem& menuItem) {
     }
 
     // Return to menu or next operation
-    ui.setInMenu(true); // Assuming this flag controls whether you're in the main menu
+    //ui.setInMenu(true); // Assuming this flag controls whether you're in the main menu
 }
 
 void displayCredentials(int index) {
@@ -1895,7 +1896,7 @@ void stopScanKarma() {
         currentStateKarma = StopScanKarma;
     } else {
         currentStateKarma = StartScanKarma;
-        ui.setInMenu(true);
+        //ui.setInMenu(true);
     }
     isKarmaMode = false;
     isProbeSniffingMode = false;
@@ -2049,7 +2050,7 @@ void startAPWithSSIDKarma(const char* ssid) {
     if (ui.confirmPopup("Save " + String(ssid) + " ?" , true)) {
         saveSSIDToFile(ssid);
     }
-    ui.setInMenu(true);
+    //ui.setInMenu(true);
     isProbeKarmaAttackMode = false;
     currentStateKarma = StartScanKarma;
     memset(ssidsKarma, 0, sizeof(ssidsKarma));
@@ -2443,7 +2444,7 @@ void probeAttack() {
     sendMessage("-------------------");
     wireless.restoreOriginalWiFiSettings();
     useCustomProbes = false;
-    ui.setInMenu(true);
+    //ui.setInMenu(true);
 }
 // probe attack end
 
@@ -2521,7 +2522,7 @@ void loopAutoKarma() {
             isAPDeploying = false;
             isAutoKarmaActive = false;
             isInitialDisplayDone = false;
-            ui.setInMenu(true);
+            //ui.setInMenu(true);
             memset(lastSSID, 0, sizeof(lastSSID));
             memset(lastDeployedSSID, 0, sizeof(lastDeployedSSID));
             newSSIDAvailable = false;
@@ -2552,7 +2553,7 @@ void loopAutoKarma() {
     newSSIDAvailable = false;
     isWaitingForProbeDisplayed = false;
     isInitialDisplayDone = false;
-    ui.setInMenu(true);
+    //ui.setInMenu(true);
 }
 
 void activateAPForAutoKarma(const char* ssid) {
@@ -2618,7 +2619,7 @@ void activateAPForAutoKarma(const char* ssid) {
             isAPDeploying = false;
             isAutoKarmaActive = false;
             isInitialDisplayDone = false;
-            ui.setInMenu(true);
+            //ui.setInMenu(true);
             sendMessage("-------------------");
             sendMessage("Karma Successful for : " + currentClonedSSID);
             sendMessage("-------------------");
