@@ -99,7 +99,6 @@ void EvilUI::aboutScreen(String message) {
 void EvilUI::waitAndReturnToMenu(String message) {
     writeSingleMessage(message, true);
     delay(1500);
-    setInMenu(true);
 }
 
 bool EvilUI::confirmPopup(String message, bool clearScreen) {
@@ -128,24 +127,6 @@ bool EvilUI::confirmPopup(String message, bool clearScreen) {
     }
 
     return confirm;
-}
-
-void EvilUI::resetMenuDraw() {
-    inMenu = true;
-    isOperationInProgress = false;
-}
-
-void EvilUI::setOperationInProgress() {
-    isOperationInProgress = true;
-    setInMenu(false);
-}
-
-bool EvilUI::getInMenu() {
-    return inMenu;
-}
-
-void EvilUI::setInMenu(bool val) {
-    inMenu = val;
 }
 
 void EvilUI::clearAppScreen() {

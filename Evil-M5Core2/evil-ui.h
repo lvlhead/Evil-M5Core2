@@ -53,15 +53,8 @@ class EvilUI {
     bool clearScreenDelay();
     // TODO: Remove old Menu functions
     void waitAndReturnToMenu(String message);
-    void resetMenuDraw();
-    void setOperationInProgress();
-    bool getInMenu();
-    void setInMenu(bool val);
 
   private:
-    bool inMenu;
-    int maxMenuDisplay;
-    bool isOperationInProgress;
     unsigned long previousMillis;
 };
 
