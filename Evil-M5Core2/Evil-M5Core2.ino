@@ -659,31 +659,16 @@ void showWifiDetailSelect(CallbackMenuItem& menuItem) {
     int32_t rssi = WiFi.RSSI(networkIndex);
     uint8_t* bssid = WiFi.BSSID(networkIndex);
     String macAddress = bssidToString(bssid);
-
-    if (ui.clearScreenDelay()) {
-        std::vector<String> messages;
-        messages.push_back("SSID: " + (ssidList[networkIndex].length() > 0 ? ssidList[networkIndex] : "N/A"));
-        messages.push_back("Channel: " + (channel > 0 ? String(channel) : "N/A"));
-        messages.push_back("Security: " + (security.length() > 0 ? security : "N/A"));
-        messages.push_back("Signal: " + (rssi != 0 ? String(rssi) + " dBm" : "N/A"));
-        messages.push_back("MAC: " + (macAddress.length() > 0 ? macAddress : "N/A"));
-        ui.writeVectorMessage(messages, 10, 10, 20);
-
-        sendMessage("------Wifi-Info----");
-        sendMessage("SSID: " + ssidList[networkIndex]);
-        sendMessage("Channel: " + String(WiFi.channel(networkIndex)));
-        sendMessage("Security: " + security);
-        sendMessage("Signal: " + String(rssi) + " dBm");
-        sendMessage("MAC: " + macAddress);
-        sendMessage("-------------------");
-    }
+    bool updateScreen = false;
 
     if (M5.BtnA.wasReleased()) {
         // Select Previous SSID
         networkIndex = (networkIndex - 1 + wireless.getNumSSID()) % wireless.getNumSSID();
+        updateScreen = true;
     } else if (M5.BtnB.wasReleased()) {
         // Select Next SSID
         networkIndex = (networkIndex + 1) % wireless.getNumSSID();
+        updateScreen = true;
     } else if (M5.BtnC.wasReleased()) {
         // Clone and Exit
         currentClonedSSID = ssidList[networkIndex];
@@ -691,6 +676,25 @@ void showWifiDetailSelect(CallbackMenuItem& menuItem) {
         ui.waitAndReturnToMenu(ssidList[networkIndex] + " Cloned...");
         sendMessage(ssidList[networkIndex] + " Cloned...");
         menuItem.deactivateCallbacks();
+    }
+
+    std::vector<String> messages;
+    messages.push_back("SSID: " + (ssidList[networkIndex].length() > 0 ? ssidList[networkIndex] : "N/A"));
+    messages.push_back("Channel: " + (channel > 0 ? String(channel) : "N/A"));
+    messages.push_back("Security: " + (security.length() > 0 ? security : "N/A"));
+    messages.push_back("Signal: " + (rssi != 0 ? String(rssi) + " dBm" : "N/A"));
+    messages.push_back("MAC: " + (macAddress.length() > 0 ? macAddress : "N/A"));
+    ui.writeVectorMessage(messages, 10, 10, 20);
+
+    if (updateScreen) {
+        ui.clearAppScreen();
+        sendMessage("------Wifi-Info----");
+        sendMessage("SSID: " + ssidList[networkIndex]);
+        sendMessage("Channel: " + String(WiFi.channel(networkIndex)));
+        sendMessage("Security: " + security);
+        sendMessage("Signal: " + String(rssi) + " dBm");
+        sendMessage("MAC: " + macAddress);
+        sendMessage("-------------------");
     }
 }
 
