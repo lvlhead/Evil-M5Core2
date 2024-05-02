@@ -520,8 +520,7 @@ void scanWifiNetworks(CallbackMenuItem& menuItem) {
             sendMessage("SSID " +ssidList[currentListIndex] + " selected");
             sendMessage("-------------------");
             ui.waitAndReturnToMenu(ssidList[currentListIndex] + " selected");
-            Serial.println(menuItem.getText()); // TODO: This prints the selected option
-            menuItem.deactivateCallbacks(); // TODO: This does not drop us out of the menu
+            menuItem.getMenu()->disable();  // Exit to the previous menu
         });
     }
     ui.waitAndReturnToMenu("Scan Completed");
