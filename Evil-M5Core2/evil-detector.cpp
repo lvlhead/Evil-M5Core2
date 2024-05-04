@@ -87,7 +87,6 @@ void EvilDetector::emptyDetectorCallback(CallbackMenuItem& menuItem) {
 void EvilDetector::showDetectorApp() {
     // Set up application for first run
     if (!isAppRunning) {
-        wireless.ESP_BT.end();
         bluetoothEnabled = false;
         esp_wifi_set_promiscuous(false);
         esp_wifi_stop();

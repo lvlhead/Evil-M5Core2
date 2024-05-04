@@ -36,7 +36,10 @@
 #include <M5StackMenuSystem.h>
 #include <M5Unified.h>
 #include <WiFi.h>
-#include "BLEDevice.h"
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEScan.h>
+#include <BLEAdvertisedDevice.h>
 
 #include "evil-ui.h"
 #include "evil-util.h"
@@ -56,15 +59,12 @@ class EvilWoF {
     void showWoFApp();
     void closeWoFApp();
     static void emptyWoFCallback(CallbackMenuItem& menuItem);
-    void wallOfFlipper();
     void toggleAppRunning();
 
   private:
     EvilUI ui;
     bool isAppRunning;
-    unsigned long lastFlipperFoundMillis;
     bool isBLEInitialized;
-    std::vector<ForbiddenPacket> forbiddenPackets;
     void initializeBLEIfNeeded();
 };
 

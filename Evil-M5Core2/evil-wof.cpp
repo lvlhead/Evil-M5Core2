@@ -85,8 +85,8 @@ bool isMacAddressRecorded(const String& macAddress) {
     return false;
 }
 
+
 class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
-    int lastFlipperFoundMillis = 0;
     int lineCount = 0;
     const int maxLines = 10;
     void onResult(BLEAdvertisedDevice advertisedDevice) override {
@@ -122,7 +122,6 @@ class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
             advertisedDevice.getRSSI(),
             macAddress.c_str());
             recordFlipper(name, macAddress, deviceColor, isValidMac); // Passer le statut de validité de l'adresse MAC
-            lastFlipperFoundMillis = millis();
         }
 
         std::string advData = advertisedDevice.getManufacturerData();
@@ -138,8 +137,8 @@ class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
             Serial.println(); // Nouvelle ligne après les données brutes
 */
 
-            for(auto& packet : forbiddenPackets) {
-                if(matchPattern(packet.pattern, payload, length)) {
+            for (auto& packet : forbiddenPackets) {
+                if (matchPattern(packet.pattern, payload, length)) {
                     if (lineCount >= maxLines) {
                         M5.Display.fillRect(0, 58, 325, 185, BLACK); // Réinitialiser la zone d'affichage des paquets interdits
                         M5.Display.setCursor(0, 59);
@@ -172,24 +171,21 @@ void EvilWoF::showWoFApp() {
 
     // Run the app
     if (ui.clearScreenDelay()) {
-        wallOfFlipper();
+        ui.writeMessageXY("Waiting for Flipper", 0, 10, false);
+        BLEScan* pBLEScan = BLEDevice::getScan();
+        pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks(), true);
+        pBLEScan->setActiveScan(true);
+        pBLEScan->start(1, false);
     }
 }
 
 void EvilWoF::closeWoFApp() {
     ui.waitAndReturnToMenu("Stop detection...");
+    toggleAppRunning();
 }
 
 void EvilWoF::toggleAppRunning() {
     isAppRunning = !isAppRunning;
-}
-
-void EvilWoF::wallOfFlipper() {
-    ui.writeMessageXY("Waiting for Flipper", 0, 10, false);
-    BLEScan* pBLEScan = BLEDevice::getScan();
-    pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks(), true);
-    pBLEScan->setActiveScan(true);
-    pBLEScan->start(1, false);
 }
 
 void EvilWoF::initializeBLEIfNeeded() {

@@ -166,22 +166,6 @@ String EvilWireless::getWifiSecurity(int networkIndex) {
     }
 }
 
-void EvilWireless::toggleBleSerial() {
-    if (bluetoothEnabled) {
-        ESP_BT.end();
-    } else {
-        WiFi.mode(WIFI_OFF);
-        WiFi.disconnect(true);
-        delay(500);
-        esp_wifi_set_promiscuous(false);
-        esp_wifi_stop();
-        esp_wifi_deinit();
-        ESP_BT.begin(BLUETOOTH_NAME);
-        ESP_BT.setPin("730303"); // NOT WORKING // WORK ONLY WITH esp v1.0.1 // workaround password in serial
-    }
-    bluetoothEnabled = !bluetoothEnabled;
-}
-
 int EvilWireless::getNumSSID() {
     return numSSID;
 }

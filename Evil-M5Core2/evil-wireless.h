@@ -35,7 +35,6 @@
 
 #include <M5StackMenuSystem.h>
 #include <WiFi.h>
-#include "BluetoothSerial.h"
 
 #include "evil-ui.h"
 #include "evil-util.h"
@@ -43,7 +42,6 @@
 class EvilWireless {
   public:
     EvilWireless();
-    BluetoothSerial ESP_BT;
     void scanWiFi();
     void connectToWiFi();
     // Old Functions
@@ -56,7 +54,6 @@ class EvilWireless {
     void setRandomMAC_STA();
     String generateRandomMAC(bool karmaMode);
     String getWifiSecurity(int networkIndex);
-    void toggleBleSerial();
     int getNumSSID();
     bool isNetworkOpen(const String& line);
     String extractSSID(const String& line);

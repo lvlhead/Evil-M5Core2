@@ -39,8 +39,6 @@
 #define WEB_ACCESS_PASSWORD "password"  // password for web access to remote check captured credentials and send new html file
 #define LED_ENABLED false  // change this to true to get cool led effect (only on fire)
 #define GPS_ENABLED false  // Change this to true to enable GPS logging for Wardriving data
-// Also remember that bluetooth is not protected and anyone can connect to it without pincode (esp librairies issue) to ensure protection serial password is implemented
-#define BLUETOOTH_SERIAL_PASSWORD "7h30th3r0n3"
 /*-----------------------------------------------------------------*/
 
 #include <vector>
@@ -53,7 +51,6 @@
 #include <SD.h>
 #include <M5StackMenuSystem.h>
 #include <M5Unified.h>
-#include "BLEDevice.h"
 
 extern "C" {
     #include "esp_wifi.h"
@@ -67,9 +64,9 @@ extern "C" {
 #include "evil-beacon.h"
 #include "evil-detector.h"
 #include "evil-monitor.h"
-#include "evil-util.h"
 #include "evil-wardriving.h"
 #include "evil-wof.h"
+#include "evil-util.h"
 #include "evil-wireless.h"
 
 // Initialize modules
@@ -426,7 +423,6 @@ void setup() {
     // Define Settings Menu
     subMenuSettings.addMenuItem("Monitor Status", monitor.emptyMonitorCallback, showMonitorStatus);
     subMenuSettings.addMenuItem("Adjust Brightness", emptyBrigtnessCallback, showBrightnessAdjust);
-    subMenuSettings.addMenuItem("Toggle BLE Radio", showToggleBleSerial);
     subMenuSettings.addSubMenu("Change Portal", &subMenuChangePortal);
     subMenuSettings.addMenuItem("Check Credentials", checkCredentials);
     subMenuSettings.addMenuItem("Delete All Credentials", deleteCredentials);
@@ -449,7 +445,7 @@ void setup() {
 
 void customizeLayout(Layout& layout) {
     // smaller font
-    //layout.FONT = 11;
+    //layout.MENU_FONT = 11;
     //layout.MENU_FONT_SIZE = 2;
 
     // monochrome theme
@@ -482,17 +478,6 @@ void loop() {
             mainMenu.enable();
         }
     }
-}
-
-void showToggleBleSerial(CallbackMenuItem& menuItem) {
-    if (bluetoothEnabled) {
-        ui.waitAndReturnToMenu("Bluetooth OFF");
-        sendMessage("Bluetooth turned off");
-    } else {
-        ui.waitAndReturnToMenu("Bluetooth ON");
-        sendMessage("Bluetooth turned on");
-    }
-    wireless.toggleBleSerial();
 }
 
 // Monitor Status
@@ -730,21 +715,6 @@ void handleDnsRequestSerial() {
         dnsServer.processNextRequest();
         server.handleClient();
     }
-    if (Serial.available()) {
-        String command = Serial.readStringUntil('\n');
-        checkSerialCommands(command, false);
-    }
-    if (wireless.ESP_BT.available()) {
-        String command = "";
-        while (wireless.ESP_BT.available()) {
-            char c = wireless.ESP_BT.read();
-            command += c;
-            if (c == '\n') {
-                break;
-            }
-        }
-        checkSerialCommands(command, true);
-    }
 }
 
 
@@ -791,173 +761,6 @@ String currentlySelectedSSID = "";
 bool isProbeAttackRunning = false;
 bool stopProbeSniffingViaSerial = false;
 bool isProbeSniffingRunning = false;
-
-void checkSerialCommands(String command, bool fromBluetooth) {
-    command.trim();
-    if (fromBluetooth) {
-        if (connectionState == AWAITING_PASSWORD) {
-            if (command.equals(BLUETOOTH_SERIAL_PASSWORD)) {
-                connectionState = AUTHENTICATED;
-                wireless.ESP_BT.println("Password correct, you are now authenticated");
-                return;
-            } else {
-                wireless.ESP_BT.println("Password protected.");
-                wireless.ESP_BT.disconnect();
-                return;
-            }
-        }
-    }
-
-    if (connectionState == AUTHENTICATED || !fromBluetooth) {
-        if (command == "scan_wifi") {
-            //ui.setOperationInProgress();
-            wireless.scanWiFi();
-            sendMessage("-------------------");
-            sendMessage("Near Wifi Network : ");
-            for (int i = 0; i < wireless.getNumSSID(); i++) {
-                ssidList[i] = WiFi.SSID(i);
-                sendMessage(String(i) + ": " + ssidList[i]);
-            }
-        } else if (command.startsWith("select_network")) {
-            int ssidIndex = command.substring(String("select_network ").length()).toInt();
-            selectNetwork(ssidIndex);
-            sendMessage("SSID sélectionné: " + currentlySelectedSSID);
-        } else if (command.startsWith("change_ssid ")) {
-            String newSSID = command.substring(String("change_ssid ").length());
-            currentClonedSSID = newSSID;
-            sendMessage("Cloned SSID changed to: " + currentClonedSSID);
-        } else if (command.startsWith("set_portal_password ")) {
-            String newPassword = command.substring(String("set_portal_password ").length());
-            captivePortalPassword = newPassword;
-            sendMessage("Captive portal password changed to: " + captivePortalPassword);
-        } else if (command.startsWith("set_portal_open")) {
-            captivePortalPassword = "";
-            sendMessage("Open Captive portal set");
-        } else if (command.startsWith("detail_ssid")) {
-            int ssidIndex = command.substring(String("detail_ssid ").length()).toInt();
-            String security = wireless.getWifiSecurity(ssidIndex);
-            int32_t rssi = WiFi.RSSI(ssidIndex);
-            uint8_t* bssid = WiFi.BSSID(ssidIndex);
-            String macAddress = bssidToString(bssid);
-            M5.Display.display();
-            sendMessage("------Wifi-Info----");
-            sendMessage("SSID: " + (ssidList[ssidIndex].length() > 0 ? ssidList[ssidIndex] : "N/A"));
-            sendMessage("Channel: " + String(WiFi.channel(ssidIndex)));
-            sendMessage("Security: " + security);
-            sendMessage("Signal: " + String(rssi) + " dBm");
-            sendMessage("MAC: " + macAddress);
-            sendMessage("-------------------");
-        } else if (command == "clone_ssid") {
-            currentClonedSSID = currentlySelectedSSID;
-            sendMessage("Cloned SSID: " + currentClonedSSID);
-        } else if (command == "start_portal") {
-            //createCaptivePortal();
-            sendMessage("Start portal with " + currentClonedSSID);
-        } else if (command == "stop_portal") {
-            //stopCaptivePortal();
-            sendMessage("Portal Stopped ");
-        } else if (command == "list_portal") {
-            File root = openFile("/sites", FILE_READ);
-            numPortalFiles = 0;
-            sendMessage("-------------------");
-            sendMessage("Availables portals :");
-            while (File file = root.openNextFile()) {
-                if (!file.isDirectory()) {
-                    String fileName = file.name();
-                    if (fileName.endsWith(".html")) {
-                        portalFiles[numPortalFiles] = String("/sites/") + fileName;
-
-                        sendMessage(String(numPortalFiles) + ": " + fileName);
-                        numPortalFiles++;
-                        if (numPortalFiles >= 30) break; // max 30 files
-                    }
-                }
-                file.close();
-            }
-            root.close();
-        } else if (command.startsWith("change_portal")) {
-            int portalIndex = command.substring(String("change_portal ").length()).toInt();
-            changePortal(portalIndex);
-        } else if (command == "check_credentials") {
-            checkCredentialsSerial();
-        } else if (command == "monitor_status") {
-            String status = monitor.getMonitoringStatus();
-            sendMessage("-------------------");
-            sendMessage(status);
-        } else if (command == "probe_attack") {
-            //ui.setOperationInProgress();
-            isItSerialCommand = true;
-            probeAttack();
-            delay(200);
-        } else if (command == "stop_probe_attack") {
-            if (isProbeAttackRunning) {
-                isProbeAttackRunning = false;
-                sendMessage("-------------------");
-                sendMessage("Stopping probe attack...");
-                sendMessage("-------------------");
-            } else {
-                sendMessage("-------------------");
-                sendMessage("No probe attack running.");
-                sendMessage("-------------------");
-            }
-        } else if (command == "probe_sniffing") {
-            //ui.setOperationInProgress();
-            probeSniffing();
-            delay(200);
-        } else if (command == "stop_probe_sniffing") {
-            stopProbeSniffingViaSerial = true;
-            isProbeSniffingRunning = false;
-            sendMessage("-------------------");
-            sendMessage("Stopping probe sniffing via serial...");
-            sendMessage("-------------------");
-        } else if (command == "list_probes") {
-            listProbesSerial();
-        } else if (command.startsWith("select_probes ")) {
-            int index = command.substring(String("select_probes ").length()).toInt();
-            selectProbeSerial(index);
-        } else if (command == "karma_auto") {
-            //ui.setOperationInProgress();
-            startAutoKarma();
-            delay(200);
-        } else if (command == "exit") {
-            sendMessage("Disconnecting Bluetooth.");
-            wireless.ESP_BT.println("Disconnecting. Connexion protected by Password.");
-            wireless.ESP_BT.disconnect();
-            connectionState = AWAITING_PASSWORD;
-            return;
-        } else if (command == "help") {
-            sendMessage("-------------------");
-            sendMessage("Available Commands:");
-            sendMessage("scan_wifi - Scan WiFi Networks");
-            sendMessage("select_network <index> - Select WiFi <index>");
-            sendMessage("change_ssid <max 32 char> - change current SSID");
-            sendMessage("set_portal_password <password min 8> - portal pass");
-            sendMessage("set_portal_open - change portal to open");
-            sendMessage("detail_ssid <index> - Details of WiFi <index>");
-            sendMessage("clone_ssid - Clone Network SSID");
-            sendMessage("start_portal - Activate Captive Portal");
-            sendMessage("stop_portal - Deactivate Portal");
-            sendMessage("list_portal - Show Portal List");
-            sendMessage("change_portal <index> - Switch Portal <index>");
-            sendMessage("check_credentials - Check Saved Credentials");
-            sendMessage("monitor_status - Get current information on device");
-            sendMessage("probe_attack - Initiate Probe Attack");
-            sendMessage("stop_probe_attack - End Probe Attack");
-            sendMessage("probe_sniffing - Begin Probe Sniffing");
-            sendMessage("stop_probe_sniffing - End Probe Sniffing");
-            sendMessage("list_probes - Show Probes");
-            sendMessage("select_probes <index> - Choose Probe <index>");
-            sendMessage("karma_auto - Auto Karma Attack Mode");
-            sendMessage("exit - !! exit and set password for new connexion !!");
-            sendMessage("-------------------");
-        } else {
-            sendMessage("-------------------");
-            sendMessage("Command not recognized: " + command);
-            sendMessage("-------------------");
-        }
-    }
-}
-
 
 void selectNetwork(int index) {
     if (index >= 0 && index < wireless.getNumSSID()) {
@@ -1758,7 +1561,6 @@ void startScanKarma() {
     ssid_count_Karma = 0;
     M5.Display.clear();
     drawStopButtonKarma();
-    wireless.ESP_BT.end();
     bluetoothEnabled = false;
     esp_wifi_set_promiscuous(false);
     esp_wifi_stop();
@@ -2386,7 +2188,6 @@ void probeAttack() {
 bool isAPDeploying = false;
 
 void startAutoKarma() {
-    wireless.ESP_BT.end();
     bluetoothEnabled = false;
     esp_wifi_set_promiscuous(false);
     esp_wifi_stop();
@@ -2567,7 +2368,6 @@ void activateAPForAutoKarma(const char* ssid) {
 
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_MODE_STA);
-    wireless.ESP_BT.end();
     bluetoothEnabled = false;
     esp_wifi_set_promiscuous(false);
     esp_wifi_stop();
