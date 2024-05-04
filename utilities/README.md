@@ -1,3 +1,15 @@
+# deauth_prerequis :
+
+Scripts and instructions from nemo project that transform esp32 firmware to be able to send deauth frames
+
+nemo project https://github.com/n0xa/m5stick-nemo/tree/main/deauth_prerequisites
+
+
+## Procedure :
+
+Choose your plateform, run the script, your esp32 firmware is now patched.
+
+
 # Wardriving :
 
 These scripts allow you to merge the different wardriving files into one to facilitate uploading to wigle.
