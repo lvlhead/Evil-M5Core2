@@ -37,10 +37,14 @@ extern "C" {
 
 #include "evil-wireless.h"
 
+const char* ssid = WIFI_SSID;
+const char* password = WIFI_PASSWORD;
+
 EvilWireless::EvilWireless() {
     currentChannel = 1;
     originalChannel = 1;
-    numSsid = 0;
+    numSSID = 0;
+    statusWiFi = WL_IDLE_STATUS;
 }
 
 String EvilWireless::generateRandomSSID(int length) {
@@ -162,7 +166,7 @@ String EvilWireless::getWifiSecurity(int networkIndex) {
     }
 }
 
-void EvilWireless::onOffBleSerial() {
+void EvilWireless::toggleBleSerial() {
     if (bluetoothEnabled) {
         ESP_BT.end();
     } else {
@@ -179,43 +183,41 @@ void EvilWireless::onOffBleSerial() {
 }
 
 int EvilWireless::getNumSSID() {
-    return numSsid;
+    return numSSID;
 }
 
-int EvilWireless::scanAvailableSSID() {
-    // Scan for Wifi networks, store all found SSID to ssidList and
-    // return number of SSID found.
+void EvilWireless::scanWiFi() {
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();
-    unsigned long startTime = millis();
-    int n;
-
-    while (millis() - startTime < 2000) {
-        n = WiFi.scanNetworks();
-        if (n != WIFI_SCAN_RUNNING) break;
+    numSSID = WiFi.scanNetworks();
+    if (numSSID == -1) {
+        Serial.println("Could not get a WiFi connection");
+        return;
+    } else {
+        Serial.println("Detected " + String(numSSID) + " networks");
+        for (int thisNet = 0; thisNet < min(numSSID, 100); thisNet++) {
+            ssidList[thisNet] = WiFi.SSID(thisNet);
+        }
     }
-
-    numSsid = min(n, 100);
-    for (int i = 0; i < numSsid; i++) {
-        ssidList[i] = WiFi.SSID(i);
-    }
-
-    return n;
 }
 
-void EvilWireless::firstScanWifiNetworks() {
-    // Run first scan of available SSID and output
-    int n = scanAvailableSSID();
-
-    if (n == 0) {
-        sendMessage("No network found ...");
-    } else {
-        sendMessage(" Near Wifi Networks : ");
-        sendMessage("-------------------");
-        for (int i = 0; i < numSsid; i++) {
-            sendMessage(String(i) + ": " + ssidList[i]);
+void EvilWireless::connectToWiFi() {
+    // Attempt to connect to WiFi using configured SSID and password
+    if (strcmp(ssid, "") != 0) {
+        WiFi.mode(WIFI_MODE_APSTA);
+        while (statusWiFi != WL_CONNECTED) {
+            Serial.println("Attempting to connect to WiFi: " + String(ssid));
+            statusWiFi = WiFi.begin(ssid, password);
+            delay(1000);
         }
-        sendMessage("-------------------");
+
+        if (statusWiFi == WL_CONNECTED) {
+            Serial.println("Successfully connected to WiFi");
+        } else {
+            Serial.println("Failed to connect to WiFi");
+        }
+    } else {
+        Serial.println("SSID is empty, skipping WiFi connection.");
     }
 }
 

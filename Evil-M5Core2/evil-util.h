@@ -40,6 +40,8 @@
 #include "evil-wireless.h"
 
 #define APP_VERSION "1.2.0 2024"
+#define WIFI_SSID ""  // ssid to connect,connection skipped at boot if stay blank ( can be shutdown by different action like probe attack)
+#define WIFI_PASSWORD ""  // wifi password
 #define BLUETOOTH_NAME "E7vhi3l0tMh53Cro0rne32"
 
 File openFile(String filename, const char* mode);

@@ -44,6 +44,9 @@ class EvilWireless {
   public:
     EvilWireless();
     BluetoothSerial ESP_BT;
+    void scanWiFi();
+    void connectToWiFi();
+    // Old Functions
     String generateRandomSSID(int length);
     void restoreOriginalWiFiSettings();
     void setRandomMAC_APKarma();
@@ -53,19 +56,19 @@ class EvilWireless {
     void setRandomMAC_STA();
     String generateRandomMAC(bool karmaMode);
     String getWifiSecurity(int networkIndex);
-    void onOffBleSerial();
-    void firstScanWifiNetworks();
+    void toggleBleSerial();
     int getNumSSID();
     bool isNetworkOpen(const String& line);
     String extractSSID(const String& line);
   private:
+    int statusWiFi;
     int currentChannel;
     int originalChannel;
+    int numSSID;
     uint8_t originalMAC[6];
     void restoreOriginalMAC();
     int scanAvailableSSID();
     int nthIndexOf(const String& str, char toFind, int nth);
-    int numSsid;
 };
 
 #endif

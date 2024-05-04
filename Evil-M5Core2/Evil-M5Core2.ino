@@ -36,8 +36,6 @@
 // remember to change hardcoded webpassword below in the code to ensure no unauthorized access to web interface:
 // Connect to nearby wifi network automaticaly to provide internet to the core2 you can be connected and provide AP at same time
 // experimental
-#define WIFI_SSID ""  // ssid to connect,connection skipped at boot if stay blank ( can be shutdown by different action like probe attack)
-#define WIFI_PASSWORD ""  // wifi password
 #define WEB_ACCESS_PASSWORD "password"  // password for web access to remote check captured credentials and send new html file
 #define LED_ENABLED false  // change this to true to get cool led effect (only on fire)
 #define GPS_ENABLED false  // Change this to true to enable GPS logging for Wardriving data
@@ -89,7 +87,6 @@ EvilWoF flipper;
 Menu mainMenu("Main Menu");
 Menu subMenuSettings("Settings");
 Menu subMenuChangePortal("Change Portal");   // Lists all portal files in /sites and sets portal file in use
-Menu subMenuWifiList("Wifi List");  // Dynamically updated menu, returns position int of selected item
 
 // Web and DNS Servers
 WebServer server(80);
@@ -104,8 +101,6 @@ ConnectionState connectionState = AWAITING_PASSWORD;
 // end bluetooth password pass
 
 // Set up 
-const char* ssid = WIFI_SSID;
-const char* password = WIFI_PASSWORD;
 const char* accessWebPassword = WEB_ACCESS_PASSWORD;
 
 String portalFiles[30]; // 30 portals max
@@ -404,33 +399,13 @@ void setup() {
 
     // Scan for local Wifi networks
     wireless.saveOriginalMAC();
-    wireless.firstScanWifiNetworks();
+    wireless.scanWiFi();
 #if LED_ENABLED
     led.pattern2();
 #endif
 
-    // Connect to preferred Wifi network if configured
-    if (strcmp(ssid, "") != 0) {
-        WiFi.mode(WIFI_MODE_APSTA);
-        WiFi.begin(ssid, password);
-
-        unsigned long startAttemptTime = millis();
-
-        while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 3000) {
-            delay(500);
-            sendMessage("Trying to connect to Wifi...");
-        }
-
-        if (WiFi.status() == WL_CONNECTED) {
-            sendMessage("Connected to wifi !!!");
-        } else {
-            sendMessage("Fail to connect to Wifi or timeout...");
-        }
-    } else {
-        sendMessage("SSID is empty.");
-        sendMessage("Skipping Wi-Fi connection.");
-        sendMessage("----------------------");
-    }
+    // Connect to WiFi network
+    wireless.connectToWiFi();
 
     // Complete hardware initialization
     led.init();
@@ -439,12 +414,9 @@ void setup() {
 #endif
 
     // Define Main Menu
-    mainMenu.addMenuItem("Scan WiFi", scanWifiNetworks);
-    mainMenu.addSubMenu("Select Network", &subMenuWifiList);
-    mainMenu.addMenuItem("Clone & Details", emptyWifiDetailCallback, showWifiDetailSelect);
+    mainMenu.addMenuItem("Scan/Details/Clone", emptyWifiDetailCallback, showWifiDetailSelect);
     mainMenu.addMenuItem("Start Captive Portal", createCaptivePortal);
     mainMenu.addMenuItem("Stop Captive Portal", stopCaptivePortal);
-    mainMenu.addMenuItem("Change Portal", stopCaptivePortal);
     mainMenu.addMenuItem("Wardriving", wardrive.emptyWardriveCallback, showWardriveMode);
     mainMenu.addMenuItem("Beacon Spam", beacon.emptyBeaconCallback, showBeaconAttack);
     mainMenu.addMenuItem("Handshake/Deauth Sniffing", detector.emptyDetectorCallback, showDetector);
@@ -455,15 +427,15 @@ void setup() {
     subMenuSettings.addMenuItem("Monitor Status", monitor.emptyMonitorCallback, showMonitorStatus);
     subMenuSettings.addMenuItem("Adjust Brightness", emptyBrigtnessCallback, showBrightnessAdjust);
     subMenuSettings.addMenuItem("Toggle BLE Radio", showToggleBleSerial);
+    subMenuSettings.addSubMenu("Change Portal", &subMenuChangePortal);
     subMenuSettings.addMenuItem("Check Credentials", checkCredentials);
     subMenuSettings.addMenuItem("Delete All Credentials", deleteCredentials);
     subMenuSettings.addMenuItem("Delete All Probes", deleteAllProbes);
 
     // Customize the menu layouts, currently to set menu width/height
-    //customizeLayout(mainMenu.getLayout());
-    //customizeLayout(subMenuSettings.getLayout());
-    //customizeLayout(subMenuWifiList.getLayout());
-    //customizeLayout(subMenuChangePortal.getLayout());
+    customizeLayout(mainMenu.getLayout());
+    customizeLayout(subMenuSettings.getLayout());
+    customizeLayout(subMenuChangePortal.getLayout());
 
     // TODO: Remove random initialization of global variables
     currentClonedSSID = "Evil-M5Core2";
@@ -471,25 +443,27 @@ void setup() {
     bluetoothEnabled = false;
     currentBrightness = M5.Display.getBrightness();
     selectedPortalFile = "/sites/normal.html"; // defaut portal
+    listPortalFiles();
 }
 
 
 void customizeLayout(Layout& layout) {
     // smaller font
-    layout.MENU_FONT_SIZE = 2;
+    //layout.FONT = 11;
+    //layout.MENU_FONT_SIZE = 2;
 
     // monochrome theme
-    layout.TOP_BAR_TITLE_COLOR = WHITE;
+    //layout.TOP_BAR_TITLE_COLOR = WHITE;
     layout.TOP_BAR_BACKGROUND_COLOR = PURPLE;
 
-    layout.MENU_ITEM_TEXT_COLOR = WHITE;
-    layout.MENU_ITEM_BACKGROUND_COLOR = BLACK;
-    layout.MENU_ITEM_HIGHLIGHTED_TEXT_COLOR = BLACK;
-    layout.MENU_ITEM_HIGHLIGHTED_BACKGROUND_COLOR = WHITE;
-    layout.MENU_ITEM_HIGHLIGHTED_ICON_SIZE = 3;
+    //layout.MENU_ITEM_TEXT_COLOR = WHITE;
+    //layout.MENU_ITEM_BACKGROUND_COLOR = BLACK;
+    //layout.MENU_ITEM_HIGHLIGHTED_TEXT_COLOR = BLACK;
+    //layout.MENU_ITEM_HIGHLIGHTED_BACKGROUND_COLOR = WHITE;
+    //layout.MENU_ITEM_HIGHLIGHTED_ICON_SIZE = 3;
 
-    layout.BOTTOM_BAR_BACKGROUND_COLOR = DARKGREY;
-    layout.BOTTOM_BAR_SOFTKEY_COLOR = WHITE;
+    layout.BOTTOM_BAR_BACKGROUND_COLOR = PURPLE;
+    //layout.BOTTOM_BAR_SOFTKEY_COLOR = WHITE;
     layout.BOTTOM_BAR_SOFTKEY_BACKGROUND_COLOR = PURPLE;
 }
 
@@ -510,22 +484,6 @@ void loop() {
     }
 }
 
-void scanWifiNetworks(CallbackMenuItem& menuItem) {
-    ui.writeSingleMessage("Scan in progress...", true);
-    wireless.firstScanWifiNetworks();
-    for (int i = 0; i < wireless.getNumSSID(); i++) {
-        subMenuWifiList.addMenuItem(ssidList[i], [](CallbackMenuItem& menuItem) {
-            currentListIndex = menuItem.getPosition() - 1;
-            sendMessage("-------------------");
-            sendMessage("SSID " +ssidList[currentListIndex] + " selected");
-            sendMessage("-------------------");
-            ui.waitAndReturnToMenu(ssidList[currentListIndex] + " selected");
-            menuItem.getMenu()->disable();  // Exit to the previous menu
-        });
-    }
-    ui.waitAndReturnToMenu("Scan Completed");
-}
-
 void showToggleBleSerial(CallbackMenuItem& menuItem) {
     if (bluetoothEnabled) {
         ui.waitAndReturnToMenu("Bluetooth OFF");
@@ -534,7 +492,7 @@ void showToggleBleSerial(CallbackMenuItem& menuItem) {
         ui.waitAndReturnToMenu("Bluetooth ON");
         sendMessage("Bluetooth turned on");
     }
-    wireless.onOffBleSerial();
+    wireless.toggleBleSerial();
 }
 
 // Monitor Status
@@ -646,7 +604,17 @@ void showBrightnessAdjust(CallbackMenuItem& menuItem) {
 // Clone & Details
 void emptyWifiDetailCallback(CallbackMenuItem& menuItem) {
     M5.Display.clear();
-    networkIndex = currentListIndex;
+    networkIndex = 0;
+
+    // Scan WiFi and write messages to user before buttons render
+    ui.writeSingleMessage("Scan in progress...", false);
+    wireless.scanWiFi();
+    ui.clearAppScreen();
+    ui.writeSingleMessage("Scan Completed", false);
+    delay(500);
+    ui.clearAppScreen();
+
+    // Render the SoftKeys
     menuItem.getMenu()->displaySoftKey(BtnASlot, "Prev");
     menuItem.getMenu()->displaySoftKey(BtnBSlot, "Next");
     menuItem.getMenu()->displaySoftKey(BtnCSlot, "Clone");
@@ -683,7 +651,7 @@ void showWifiDetailSelect(CallbackMenuItem& menuItem) {
     messages.push_back("Security: " + (security.length() > 0 ? security : "N/A"));
     messages.push_back("Signal: " + (rssi != 0 ? String(rssi) + " dBm" : "N/A"));
     messages.push_back("MAC: " + (macAddress.length() > 0 ? macAddress : "N/A"));
-    ui.writeVectorMessage(messages, 10, 10, 20);
+    ui.writeVectorMessage(messages, 10, 20, 25);
 
     if (updateScreen) {
         ui.clearAppScreen();
@@ -718,6 +686,40 @@ void deleteCredentials(CallbackMenuItem& menuItem) {
         }
     } else {
         ui.waitAndReturnToMenu("Deletion cancelled");
+    }
+}
+
+void listPortalFiles() {
+    // Read files from directory and populate menu
+    File root = openFile("/sites", FILE_READ);
+
+    while (File file = root.openNextFile()) {
+        if (!file.isDirectory()) {
+            String fileName = file.name();
+            // Ignore mac os file stating with ._
+            if (!fileName.startsWith("._") && fileName.endsWith(".html")) {
+                portalFiles[numPortalFiles] = String("/sites/") + fileName;
+                numPortalFiles++;
+            }
+        }
+        file.close();
+    }
+    root.close();
+
+    for (int i = 0; i < numPortalFiles; i++) {
+        subMenuChangePortal.addMenuItem(portalFiles[i], [](CallbackMenuItem& menuItem) {
+            portalFileIndex = menuItem.getPosition() - 1;
+            selectedPortalFile = portalFiles[portalFileIndex];
+            sendMessage("-------------------");
+            sendMessage(String(selectedPortalFile) + " portal selected.");
+            sendMessage("-------------------");
+#if LED_ENABLED
+            led.pattern5();
+#endif
+            ui.waitAndReturnToMenu(String(selectedPortalFile) + " selected");
+            changePortal(portalFileIndex);
+            menuItem.getMenu()->disable();  // Exit to the previous menu
+        });
     }
 }
 
@@ -809,7 +811,7 @@ void checkSerialCommands(String command, bool fromBluetooth) {
     if (connectionState == AUTHENTICATED || !fromBluetooth) {
         if (command == "scan_wifi") {
             //ui.setOperationInProgress();
-            //scanWifiNetworks();
+            wireless.scanWiFi();
             sendMessage("-------------------");
             sendMessage("Near Wifi Network : ");
             for (int i = 0; i < wireless.getNumSSID(); i++) {
@@ -1447,28 +1449,6 @@ void stopCaptivePortal(CallbackMenuItem& menuItem) {
     ui.waitAndReturnToMenu("Portal Stopped");
 }
 
-void listPortalFiles(CallbackMenuItem& menuItem) {
-    File root = openFile("/sites", FILE_READ);
-
-    numPortalFiles = 0;
-    sendMessage("Available portals:");
-    while (File file = root.openNextFile()) {
-        if (!file.isDirectory()) {
-            String fileName = file.name();
-            // Ignore mac os file stating with ._
-            if (!fileName.startsWith("._") && fileName.endsWith(".html")) {
-                portalFiles[numPortalFiles] = String("/sites/") + fileName;
-                sendMessage(String(numPortalFiles) + ": " + fileName);
-                numPortalFiles++;
-                if (numPortalFiles >= 30) break; // max 30 files
-            }
-        }
-        file.close();
-    }
-    root.close();
-}
-
-
 void serveChangePasswordPage() {
     String password = server.arg("pass");
     if (password != accessWebPassword) {
@@ -1507,56 +1487,6 @@ void handleChangePassword() {
     });
 
     serveChangePasswordPage();
-}
-
-
-void changePortal() {
-    //listPortalFiles();
-    const int listDisplayLimit = M5.Display.height() / 18;
-    bool needDisplayUpdate = true;
-
-//    while (!ui.getInMenu()) {
-        if (needDisplayUpdate) {
-            int listStartIndex = max(0, min(portalFileIndex, numPortalFiles - listDisplayLimit));
-
-            M5.Display.clear();
-            M5.Display.setTextSize(2);
-            M5.Display.setTextColor(TFT_WHITE);
-            M5.Display.setCursor(10, 10);
-
-            for (int i = listStartIndex; i < min(numPortalFiles, listStartIndex + listDisplayLimit); i++) {
-                if (i == portalFileIndex) {
-                    M5.Display.fillRect(0, (i - listStartIndex) * 18, M5.Display.width(), 18, TFT_NAVY);
-                    M5.Display.setTextColor(TFT_GREEN);
-                } else {
-                    M5.Display.setTextColor(TFT_WHITE);
-                }
-                M5.Display.setCursor(10, (i - listStartIndex) * 18);
-                M5.Display.println(portalFiles[i].substring(7));
-            }
-            M5.Display.display();
-            needDisplayUpdate = false;
-        }
-
-        M5.update();
-        if (M5.BtnA.wasPressed()) {
-            portalFileIndex = (portalFileIndex - 1 + numPortalFiles) % numPortalFiles;
-            needDisplayUpdate = true;
-        } else if (M5.BtnC.wasPressed()) {
-            portalFileIndex = (portalFileIndex + 1) % numPortalFiles;
-            needDisplayUpdate = true;
-        } else if (M5.BtnB.wasPressed()) {
-            selectedPortalFile = portalFiles[portalFileIndex];
-            //ui.setInMenu(true);
-            sendMessage("-------------------");
-            sendMessage(selectedPortalFile.substring(7) + " portal selected.");
-            sendMessage("-------------------");
-#if LED_ENABLED
-            led.pattern5();
-#endif
-            ui.waitAndReturnToMenu(selectedPortalFile.substring(7) + " selected");
-        }
-//    }
 }
 
 
