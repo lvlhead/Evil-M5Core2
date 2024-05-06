@@ -43,6 +43,22 @@
 #include "evil-util.h"
 #include "evil-wireless.h"
 
+// C Functions to support esp_wifi callback
+extern "C" void snifferCallback(void* buf, wifi_promiscuous_pkt_type_t type);
+extern "C" bool estUnPaquetEAPOL(const wifi_promiscuous_pkt_t* packet);
+extern "C" void enregistrerDansFichierPCAP(const wifi_promiscuous_pkt_t* packet, bool haveBeacon);
+extern "C" void printAddress(const uint8_t* addr);
+extern "C" void printAddressLCD(const uint8_t* addr);
+extern "C" void ecrireEntetePCAP(File &file);
+extern "C" void displayPwnagotchiDetails(const String& name, const String& pwndnb);
+extern unsigned long lastTime;  // Last time update
+extern unsigned int packetCount;  // Number of packets received
+extern int nombreDeHandshakes; // Nombre de handshakes/PMKID capturés
+extern int nombreDeDeauth;
+extern int nombreDeEAPOL;
+extern char macBuffer[18];
+extern std::set<String> registeredBeacons;
+
 class EvilDetector {
   public:
     EvilDetector();
@@ -61,13 +77,6 @@ class EvilDetector {
     EvilWireless wireless;
     bool isAppRunning;
     bool updateScreen;
-    void displayPwnagotchiDetails(const String& name, const String& pwndnb);
-    void printAddress(const uint8_t* addr);
-    void printAddressLCD(const uint8_t* addr);
-    bool estUnPaquetEAPOL(const wifi_promiscuous_pkt_t* packet);
-    void ecrireEntetePCAP(File &file);
-    void enregistrerDansFichierPCAP(const wifi_promiscuous_pkt_t* packet, bool haveBeacon);
-    void snifferCallback(void* buf, wifi_promiscuous_pkt_type_t type);
     long channelHopInterval;
     unsigned long lastChannelHopTime;
     int currentChannelDeauth;
@@ -77,14 +86,8 @@ class EvilDetector {
     unsigned long lastScreenClearTime; // To track the last screen clear
     char macBuffer[18];
     int maxChannelScanning;
-    int nombreDeHandshakes; // Nombre de handshakes/PMKID capturés
-    int nombreDeDeauth;
-    int nombreDeEAPOL;
     File pcapFile;
-    std::set<String> registeredBeacons;
     bool haveBeacon;
-    unsigned long lastTime;  // Last time update
-    unsigned int packetCount;  // Number of packets received
 };
 
 #endif

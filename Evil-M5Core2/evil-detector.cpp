@@ -32,10 +32,86 @@
 
 extern "C" {
     #include "esp_wifi.h"
+    #include "esp_wifi_types.h"
     #include "esp_system.h"
 }
 
 #include "evil-detector.h"
+
+unsigned long lastTime = 0;  // Last time update
+unsigned int packetCount = 0;  // Number of packets received
+int nombreDeDeauth = 0;
+int nombreDeHandshakes = 0; // Nombre de handshakes/PMKID capturés
+int nombreDeEAPOL = 0;
+std::set<String> registeredBeacons;
+char macBuffer[18];
+
+static wifi_country_t wifi_country = {.cc="IT", .schan = 1, .nchan = 13}; // Most recent esp32 library struct
+
+typedef struct {
+  unsigned protocol:2;
+  unsigned type:2;
+  unsigned subtype:4;
+  unsigned to_ds:1;
+  unsigned from_ds:1;
+  unsigned more_frag:1;
+  unsigned retry:1;
+  unsigned pwr_mgmt:1;
+  unsigned more_data:1;
+  unsigned wep:1;
+  unsigned strict:1;
+} wifi_header_frame_control_t;
+
+// https://carvesystems.com/news/writing-a-simple-esp8266-based-sniffer/
+typedef struct {
+  wifi_header_frame_control_t frame_ctrl;
+  unsigned duration_id:16;
+  uint8_t addr1[6]; /* receiver MAC address */
+  uint8_t addr2[6]; /* sender MAC address */
+  uint8_t addr3[6]; /* BSSID filtering address */
+  unsigned sequence_ctrl:16;
+  uint8_t addr4[6]; /* optional */
+} wifi_ieee80211_mac_hdr_t;
+
+typedef struct {
+  wifi_ieee80211_mac_hdr_t hdr;
+  uint8_t payload[0]; /* network data ended with 4 bytes csum (CRC32) */
+} wifi_ieee80211_packet_t;
+
+
+typedef struct
+{
+  unsigned interval:16;
+  unsigned capability:16;
+  unsigned tag_number:8;
+  unsigned tag_length:8;
+  char ssid[0];
+  uint8_t rates[1];
+} wifi_beacon_hdr;
+
+typedef struct {
+  uint8_t mac[6];
+} __attribute__((packed)) mac_addr;
+
+
+typedef enum
+{
+    ASSOCIATION_REQ,
+    ASSOCIATION_RES,
+    REASSOCIATION_REQ,
+    REASSOCIATION_RES,
+    PROBE_REQ,
+    PROBE_RES,
+    NU1,  /* ......................*/
+    NU2,  /* 0110, 0111 not used */
+    BEACON,
+    ATIM,
+    DISASSOCIATION,
+    AUTHENTICATION,
+    DEAUTHENTICATION,
+    ACTION,
+    ACTION_NACK,
+} wifi_mgmt_subtypes_t;
 
 // Définition de l'en-tête de fichier PCAP global
 typedef struct pcap_hdr_s {
@@ -56,6 +132,16 @@ typedef struct pcaprec_hdr_s {
     uint32_t orig_len;       /* longueur réelle du paquet */
 } pcaprec_hdr_t;
 
+const char * wifi_sniffer_packet_type2str(wifi_promiscuous_pkt_type_t type)
+{
+  switch(type) {
+  case WIFI_PKT_MGMT: return "MGMT";
+  case WIFI_PKT_DATA: return "DATA";
+  default:
+  case WIFI_PKT_MISC: return "MISC";
+  }
+}
+
 EvilDetector::EvilDetector() {
     updateScreen = true;
     channelHopInterval = 5000;
@@ -66,12 +152,7 @@ EvilDetector::EvilDetector() {
     lastDisplayedMode = !autoChannelHop; // Initialize to the opposite to force the first update
     lastScreenClearTime = 0; // To track the last screen clear
     maxChannelScanning = 13;
-    nombreDeHandshakes = 0; // Nombre de handshakes/PMKID capturés
-    nombreDeDeauth = 0;
-    nombreDeEAPOL = 0;
     haveBeacon = false;
-    lastTime = 0;  // Last time update
-    packetCount = 0;  // Number of packets received
 }
 
 void EvilDetector::init() {
@@ -99,7 +180,7 @@ void EvilDetector::showDetectorApp() {
         WiFi.mode(WIFI_STA);
         esp_wifi_start();
         esp_wifi_set_promiscuous(true);
-        //esp_wifi_set_promiscuous_rx_cb(snifferCallback);
+        esp_wifi_set_promiscuous_rx_cb(snifferCallback);
         esp_wifi_set_channel(currentChannelDeauth, WIFI_SECOND_CHAN_NONE);
 
         if (!SD.exists("/handshakes")) {
@@ -121,6 +202,7 @@ void EvilDetector::showDetectorApp() {
 
 void EvilDetector::closeApp() {
     esp_wifi_set_promiscuous(false);
+    toggleAppRunning();
     toggleAutoChannelHop();
     ui.waitAndReturnToMenu("Stop detection...");
 }
@@ -148,11 +230,7 @@ void EvilDetector::incrementChannel(int count) {
 
 void EvilDetector::deauthDetect() {
     if (autoChannelHop) {
-        unsigned long currentTime = millis();
-        if (currentTime - lastChannelHopTime > channelHopInterval) {
-            lastChannelHopTime = currentTime;
-            incrementChannel(1);
-        }
+        incrementChannel(1);
     }
 
     if (currentChannelDeauth != lastDisplayedChannelDeauth || autoChannelHop != lastDisplayedMode) {
@@ -172,7 +250,7 @@ void EvilDetector::deauthDetect() {
     }
 }
 
-bool EvilDetector::estUnPaquetEAPOL(const wifi_promiscuous_pkt_t* packet) {
+bool estUnPaquetEAPOL(const wifi_promiscuous_pkt_t* packet) {
     const uint8_t *payload = packet->payload;
     int len = packet->rx_ctrl.sig_len;
 
@@ -204,7 +282,7 @@ bool EvilDetector::estUnPaquetEAPOL(const wifi_promiscuous_pkt_t* packet) {
 }
 
 
-void EvilDetector::ecrireEntetePCAP(File &file) {
+void ecrireEntetePCAP(File &file) {
     pcap_hdr_t pcap_header;
     pcap_header.magic_number = 0xa1b2c3d4;
     pcap_header.version_major = 2;
@@ -218,7 +296,7 @@ void EvilDetector::ecrireEntetePCAP(File &file) {
     nombreDeHandshakes++;
 }
 
-void EvilDetector::enregistrerDansFichierPCAP(const wifi_promiscuous_pkt_t* packet, bool haveBeacon) {
+void enregistrerDansFichierPCAP(const wifi_promiscuous_pkt_t* packet, bool haveBeacon) {
     // Construire le nom du fichier en utilisant les adresses MAC de l'AP et du client
     const uint8_t *addr1 = packet->payload + 4;  // Adresse du destinataire (Adresse 1)
     const uint8_t *addr2 = packet->payload + 10; // Adresse de l'expéditeur (Adresse 2)
@@ -274,7 +352,7 @@ void EvilDetector::enregistrerDansFichierPCAP(const wifi_promiscuous_pkt_t* pack
     fichierPcap.close();
 }
 
-void EvilDetector::displayPwnagotchiDetails(const String& name, const String& pwndnb) {
+void displayPwnagotchiDetails(const String& name, const String& pwndnb) {
     // Construire le texte à afficher
     String displayText = "Pwnagotchi: " + name + "      \npwnd: " + pwndnb + "   ";
 
@@ -286,7 +364,7 @@ void EvilDetector::displayPwnagotchiDetails(const String& name, const String& pw
     M5.Lcd.println(displayText);
 }
 
-void EvilDetector::printAddress(const uint8_t* addr) {
+void printAddress(const uint8_t* addr) {
     for(int i = 0; i < 6; i++) {
         Serial.printf("%02X", addr[i]);
         if (i < 5) Serial.print(":");
@@ -294,7 +372,7 @@ void EvilDetector::printAddress(const uint8_t* addr) {
     Serial.println();
 }
 
-void EvilDetector::printAddressLCD(const uint8_t* addr) {
+void printAddressLCD(const uint8_t* addr) {
     // Utiliser sprintf pour formater toute l'adresse MAC en une fois
     sprintf(macBuffer, "%02X:%02X:%02X:%02X:%02X:%02X",
             addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
@@ -303,14 +381,190 @@ void EvilDetector::printAddressLCD(const uint8_t* addr) {
     M5.Lcd.print(macBuffer);
 }
 
+void snifferCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
+    packetCount++;
+    unsigned long currentTime = millis();
+    if (currentTime - lastTime >= 1000) {
+        if (packetCount < 100) {
+            M5.Lcd.setCursor(224, 20);
+        } else {
+            M5.Lcd.setCursor(212, 20);
+        }
+        M5.Lcd.printf("PPS:%d ", packetCount);
+
+        lastTime = currentTime;
+        packetCount = 0;
+    }
+
+    if (type != WIFI_PKT_DATA && type != WIFI_PKT_MGMT) return;
+
+    // New
+    wifi_promiscuous_pkt_t *pkt = (wifi_promiscuous_pkt_t *)buf;
+    const wifi_ieee80211_packet_t *ipkt = (wifi_ieee80211_packet_t *)pkt->payload;
+    const wifi_ieee80211_mac_hdr_t *hdr = &ipkt->hdr;
+    char ssid[32] = {0};
+    const wifi_header_frame_control_t *fctl = (wifi_header_frame_control_t *)&hdr->frame_ctrl;
+    int len = pkt->rx_ctrl.sig_len;
+
+    // Old
+    wifi_pkt_rx_ctrl_t ctrl = pkt->rx_ctrl;
+    const uint8_t *frame = pkt->payload;
+
+/*
+    Serial.printf("Type: 0x%02X, subType: 0x%02X\n", fctl->type, fctl->subtype);
+
+    if(fctl->subtype == BEACON) { //beacon
+        wifi_beacon_hdr *beacon=(wifi_beacon_hdr*)ipkt->payload;
+
+        if(beacon->tag_length >= 32) {
+            strncpy(ssid, beacon->ssid, 31);
+        } else {
+            strncpy(ssid, beacon->ssid, beacon->tag_length);
+        }
+        Serial.printf("Beacon %s\n",ssid);
+    }
+
+    printf("PACKET TYPE=%s, CHAN=%02d, RSSI=%02d,"
+        " ADDR1=%02x:%02x:%02x:%02x:%02x:%02x,"
+        " ADDR2=%02x:%02x:%02x:%02x:%02x:%02x,"
+        " ADDR3=%02x:%02x:%02x:%02x:%02x:%02x\n",
+        wifi_sniffer_packet_type2str(type),
+        pkt->rx_ctrl.channel,
+        pkt->rx_ctrl.rssi,
+        // ADDR1
+        hdr->addr1[0],hdr->addr1[1],hdr->addr1[2],
+        hdr->addr1[3],hdr->addr1[4],hdr->addr1[5],
+        // ADDR2
+        hdr->addr2[0],hdr->addr2[1],hdr->addr2[2],
+        hdr->addr2[3],hdr->addr2[4],hdr->addr2[5],
+        // ADDR3
+        hdr->addr3[0],hdr->addr3[1],hdr->addr3[2],
+        hdr->addr3[3],hdr->addr3[4],hdr->addr3[5]
+    );
+*/
+
+    if (estUnPaquetEAPOL(pkt)) {
+        Serial.println("EAPOL Detected !!!!");
+        // Extraire les adresses MAC
+        const uint8_t *receiverAddr = frame + 4;  // Adresse 1
+        const uint8_t *senderAddr = frame + 10;  // Adresse 2
+        // Affichage sur le port série
+        Serial.print("Address MAC destination: ");
+        printAddress(receiverAddr);
+        Serial.print("Address MAC expedition: ");
+        printAddress(senderAddr);
+
+        enregistrerDansFichierPCAP(pkt, false);
+        nombreDeEAPOL++;
+        M5.Lcd.setCursor(260, 18);
+        M5.Lcd.printf("H:");
+        M5.Lcd.print(nombreDeHandshakes);
+        if (nombreDeEAPOL < 999) {
+            M5.Lcd.setCursor(212, 36);
+        } else {
+            M5.Lcd.setCursor(202, 36);
+        }
+        M5.Lcd.printf("EAPOL:");
+        M5.Lcd.print(nombreDeEAPOL);
+    }
+
+    if (fctl->type == WIFI_PKT_MGMT && fctl->subtype == BEACON) {
+        // Convertir l'adresse MAC en chaîne de caractères pour la comparaison
+        char macStr[18];
+        snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
+        hdr->addr1[4], hdr->addr1[5], hdr->addr2[0], hdr->addr2[1], hdr->addr2[2], hdr->addr2[3]);
+
+        if (strcmp(macStr, "DE:AD:BE:EF:DE:AD") == 0) {
+            sendMessage("-------------------");
+            sendMessage("Pwnagotchi Detected !!!");
+            sendMessage("CH: " + String(pkt->rx_ctrl.channel));
+            sendMessage("RSSI: " + String(pkt->rx_ctrl.rssi));
+            sendMessage("MAC: " + String(macStr));
+            sendMessage("-------------------");
+
+            String essid = ""; // Préparer la chaîne pour l'ESSID
+            for (int i = 0; i < len - (37 + 4); i++) {
+                if (isAscii(ipkt->payload[i + 38])) {
+                    essid.concat((char)ipkt->payload[i + 38]);
+                }
+            }
+            Serial.println(essid);
+
+            int jsonStart = essid.indexOf('{');
+            if (jsonStart != -1) {
+                String cleanJson = essid.substring(jsonStart); // Nettoyer le JSON
+
+                DynamicJsonDocument json(4096); // Augmenter la taille pour l'analyse
+                DeserializationError error = deserializeJson(json, cleanJson);
+
+                if (!error) {
+                    sendMessage("Successfully parsed json");
+                    String name = json["name"].as<String>(); // Extraire le nom
+                    String pwndnb = json["pwnd_tot"].as<String>(); // Extraire le nombre de réseaux pwned
+                    sendMessage("Name: " + name); // Afficher le nom
+                    sendMessage("pwnd: " + pwndnb); // Afficher le nombre de réseaux pwned
+
+                    // affichage
+                    displayPwnagotchiDetails(name, pwndnb);
+                } else {
+                    sendMessage("Could not parse Pwnagotchi json");
+                }
+            } else {
+                sendMessage("JSON start not found in ESSID");
+            }
+        } else {
+            pkt->rx_ctrl.sig_len -= 4;  // Réduire la longueur du signal de 4 bytes
+            enregistrerDansFichierPCAP(pkt, true);  // Enregistrer le paquet
+        }
+    }
+
+    // Vérifier si c'est un paquet de désauthentification
+    if (fctl->type == WIFI_PKT_MGMT && fctl->subtype == DEAUTHENTICATION) {
+        Serial.printf("Deauth Packet detected\n");
+        // Extraire les adresses MAC
+        const uint8_t *receiverAddr = frame + 4;  // Adresse 1
+        const uint8_t *senderAddr = frame + 10;  // Adresse 2
+        // Affichage sur le port série
+        Serial.println("-------------------");
+        Serial.println("Deauth Packet detected !!! :");
+        Serial.print("CH: ");
+        Serial.println(pkt->rx_ctrl.channel);
+        Serial.print("RSSI: ");
+        Serial.println(pkt->rx_ctrl.rssi);
+        //Serial.print("Sender: "); printAddress(senderAddr);
+        //Serial.print("Receiver: "); printAddress(receiverAddr);
+        Serial.println();
+
+        // Affichage sur l'écran
+        M5.Lcd.setTextColor(WHITE, BLACK);
+        M5.Lcd.setCursor(0, 64);
+        M5.Lcd.printf("Deauth Detected!");
+        M5.Lcd.setCursor(0, 85);
+        M5.Lcd.printf("CH: %d RSSI: %d  ", pkt->rx_ctrl.channel, pkt->rx_ctrl.rssi);
+        M5.Lcd.setCursor(0, 106);
+        M5.Lcd.print("Send: "); printAddressLCD(senderAddr);
+        M5.Lcd.setCursor(0, 127);
+        M5.Lcd.print("Receive: "); printAddressLCD(receiverAddr);
+        nombreDeDeauth++;
+        if (nombreDeDeauth < 999) {
+            M5.Lcd.setCursor(200, 54);
+        } else {
+            M5.Lcd.setCursor(188, 54);
+        }
+        M5.Lcd.printf("DEAUTH:");
+        M5.Lcd.print(nombreDeDeauth);
+    }
+}
+
+/*
 void EvilDetector::snifferCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
     packetCount++;
     unsigned long currentTime = millis();
     if (currentTime - lastTime >= 1000) {
         if (packetCount < 100) {
-            M5.Lcd.setCursor(224, 0);
+            M5.Lcd.setCursor(224, 10);
         } else {
-            M5.Lcd.setCursor(212, 0);
+            M5.Lcd.setCursor(212, 10);
         }
         M5.Lcd.printf(" PPS:%d ", packetCount);
 
@@ -444,3 +698,4 @@ void EvilDetector::snifferCallback(void* buf, wifi_promiscuous_pkt_type_t type) 
         M5.Lcd.print(nombreDeDeauth);
     }
 }
+*/
