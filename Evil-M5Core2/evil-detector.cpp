@@ -170,14 +170,11 @@ const char * wifi_sniffer_packet_type2str(wifi_promiscuous_pkt_type_t type)
 
 EvilDetector::EvilDetector() {
     updateScreen = true;
-    channelHopInterval = 5000;
-    lastChannelHopTime = 0;
     currentChannelDeauth = 1;
     autoChannelHop = true; // Starts in auto mode
     channelType = autoChannelHop ? "Auto" : "Static";
     lastDisplayedChannelDeauth = -1;
     lastDisplayedMode = !autoChannelHop; // Initialize to the opposite to force the first update
-    lastScreenClearTime = 0; // To track the last screen clear
     maxChannelScanning = 13;
 }
 
@@ -273,6 +270,7 @@ void EvilDetector::deauthDetect() {
     }
 
     if (currentChannelDeauth != lastDisplayedChannelDeauth || autoChannelHop != lastDisplayedMode) {
+        lastDisplayedChannelDeauth = currentChannelDeauth;
         updateScreen = true;
     }
 

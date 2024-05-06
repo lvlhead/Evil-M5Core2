@@ -81,14 +81,11 @@ class EvilDetector {
     EvilWireless wireless;
     bool isAppRunning;
     bool updateScreen;
-    long channelHopInterval;
-    unsigned long lastChannelHopTime;
-    int currentChannelDeauth;
     bool autoChannelHop; // Starts in auto mode
+    int currentChannelDeauth;
     String channelType;
     int lastDisplayedChannelDeauth;
     bool lastDisplayedMode; // Initialize to the opposite to force the first update
-    unsigned long lastScreenClearTime; // To track the last screen clear
     int maxChannelScanning;
     File pcapFile;
 };
