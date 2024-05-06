@@ -70,7 +70,6 @@ class EvilDetector {
     void showDetectorApp();
     void closeApp();
     static void emptyDetectorCallback(CallbackMenuItem& menuItem);
-    void deauthDetect();
     void toggleAppRunning();
     void toggleAutoChannelHop();
     bool getAutoChannelHop();
@@ -84,7 +83,6 @@ class EvilDetector {
     bool autoChannelHop; // Starts in auto mode
     int currentChannelDeauth;
     String channelType;
-    int lastDisplayedChannelDeauth;
     bool lastDisplayedMode; // Initialize to the opposite to force the first update
     int maxChannelScanning;
     File pcapFile;

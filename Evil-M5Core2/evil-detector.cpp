@@ -173,8 +173,6 @@ EvilDetector::EvilDetector() {
     currentChannelDeauth = 1;
     autoChannelHop = true; // Starts in auto mode
     channelType = autoChannelHop ? "Auto" : "Static";
-    lastDisplayedChannelDeauth = -1;
-    lastDisplayedMode = !autoChannelHop; // Initialize to the opposite to force the first update
     maxChannelScanning = 13;
 }
 
@@ -216,8 +214,15 @@ void EvilDetector::showDetectorApp() {
 
     // Run the app
     if (ui.clearScreenDelay()) {
-        deauthDetect();
+        if (autoChannelHop) {
+            incrementChannel(1);
+        }
+
         // Draw the screen
+        channelType = autoChannelHop ? "Auto" : "Static";
+        ui.writeMessageXY_small("Channel: " + String(currentChannelDeauth), 5, 16, false);
+        ui.writeMessageXY_small("Mode: " + channelType, 5, 37, false);
+
         if (detectedPwnagotchi) {
             ui.writeMessageXY_small("Pwnagotchi: " + pwnagotchiName, 5, 170, false);
             ui.writeMessageXY_small("Pwnd: " + pwnagotchiPwnd, 5, 188, false);
@@ -262,29 +267,6 @@ void EvilDetector::incrementChannel(int count) {
     esp_wifi_set_channel(currentChannelDeauth, WIFI_SECOND_CHAN_NONE);
     channelType = autoChannelHop ? "Auto" : "Static";
     sendMessage(channelType + " Channel : " + String(currentChannelDeauth));
-}
-
-void EvilDetector::deauthDetect() {
-    if (autoChannelHop) {
-        incrementChannel(1);
-    }
-
-    if (currentChannelDeauth != lastDisplayedChannelDeauth || autoChannelHop != lastDisplayedMode) {
-        lastDisplayedChannelDeauth = currentChannelDeauth;
-        updateScreen = true;
-    }
-
-    if (autoChannelHop != lastDisplayedMode) {
-        lastDisplayedMode = autoChannelHop;
-        updateScreen = true;
-    }
-
-    if (updateScreen) {
-        channelType = autoChannelHop ? "Auto" : "Static";
-        ui.writeMessageXY_small("Channel: " + String(currentChannelDeauth), 5, 16, false);
-        ui.writeMessageXY_small("Mode: " + channelType, 5, 37, false);
-        updateScreen = false;
-    }
 }
 
 bool isAnEAPOLPacket(const wifi_promiscuous_pkt_t* packet) {
