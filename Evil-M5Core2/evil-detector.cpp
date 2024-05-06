@@ -228,7 +228,7 @@ void EvilDetector::showDetectorApp() {
             ui.writeMessageXY_small("Send: " + deauthAddr1, 5, 106, false);
             ui.writeMessageXY_small("Receive: " + deauthAddr2, 5, 127, false);
         }
-        ui.writeMessageXY_small("PPS: " + String(packetCount), 224, 15, false);
+        ui.writeMessageXY_small("PPS: " + String(packetCount), 223, 15, false);
         ui.writeMessageXY_small("H: " + String(nombreDeHandshakes), 248, 33, false);
         ui.writeMessageXY_small("EAPOL: " + String(nombreDeEAPOL), 202, 51, false);
         ui.writeMessageXY_small("DEAUTH: " + String(nombreDeDeauth), 188, 69, false);
