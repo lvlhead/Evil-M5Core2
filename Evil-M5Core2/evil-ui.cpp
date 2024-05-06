@@ -65,6 +65,16 @@ void EvilUI::writeMessageXY(String message, int x, int y, bool clearScreen = fal
     M5.Display.println(message);
 }
 
+void EvilUI::writeMessageXY_small(String message, int x, int y, bool clearScreen = false) {
+    if (clearScreen) {
+        M5.Display.clear();
+    }
+    M5.Display.setTextSize(1.5);
+    M5.Display.setTextColor(TFT_BLACK);
+    M5.Display.setCursor(x, y);
+    M5.Display.println(message);
+}
+
 void EvilUI::writeVectorMessage(std::vector<String> messages, int x, int y, int incr) {
     //M5.Display.clear();
     M5.Display.setTextSize(2);
