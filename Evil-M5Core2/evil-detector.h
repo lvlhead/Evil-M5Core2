@@ -45,19 +45,23 @@
 
 // C Functions to support esp_wifi callback
 extern "C" void snifferCallback(void* buf, wifi_promiscuous_pkt_type_t type);
-extern "C" bool estUnPaquetEAPOL(const wifi_promiscuous_pkt_t* packet);
-extern "C" void enregistrerDansFichierPCAP(const wifi_promiscuous_pkt_t* packet, bool haveBeacon);
-extern "C" void printAddress(const uint8_t* addr);
-extern "C" void printAddressLCD(const uint8_t* addr);
-extern "C" void ecrireEntetePCAP(File &file);
-extern "C" void displayPwnagotchiDetails(const String& name, const String& pwndnb);
-extern unsigned long lastTime;  // Last time update
+extern "C" bool isAnEAPOLPacket(const wifi_promiscuous_pkt_t* packet);
+extern "C" void saveToPCAPFile(const wifi_promiscuous_pkt_t* packet, bool haveBeacon);
+extern "C" void writePCAPHeader(File &file);
+extern "C" String convMACToStr(const uint8_t* addr);
 extern unsigned int packetCount;  // Number of packets received
 extern int nombreDeHandshakes; // Nombre de handshakes/PMKID capturés
 extern int nombreDeDeauth;
 extern int nombreDeEAPOL;
-extern char macBuffer[18];
 extern std::set<String> registeredBeacons;
+
+// UI Variables
+extern bool detectedDeauth;
+extern String deauthRssi, deauthChannel, deauthAddr1, deauthAddr2;
+extern bool detectedPwnagotchi;
+extern String pwnagotchiName;
+extern String pwnagotchiPwnd;
+extern bool detectedEAPOL;
 
 class EvilDetector {
   public:
@@ -81,13 +85,12 @@ class EvilDetector {
     unsigned long lastChannelHopTime;
     int currentChannelDeauth;
     bool autoChannelHop; // Starts in auto mode
+    String channelType;
     int lastDisplayedChannelDeauth;
     bool lastDisplayedMode; // Initialize to the opposite to force the first update
     unsigned long lastScreenClearTime; // To track the last screen clear
-    char macBuffer[18];
     int maxChannelScanning;
     File pcapFile;
-    bool haveBeacon;
 };
 
 #endif
