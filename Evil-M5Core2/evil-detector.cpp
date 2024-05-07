@@ -213,7 +213,7 @@ void EvilDetector::showDetectorApp() {
     }
 
     // Run the app
-    if (ui.clearScreenDelay()) {
+    if (ui.waitToRefresh()) {
         if (autoChannelHop) {
             incrementChannel(1);
         }
@@ -233,10 +233,10 @@ void EvilDetector::showDetectorApp() {
             ui.writeMessageXY_small("Send: " + deauthAddr1, 5, 106, false);
             ui.writeMessageXY_small("Receive: " + deauthAddr2, 5, 127, false);
         }
-        ui.writeMessageXY_small("PPS: " + String(packetCount), 223, 15, false);
-        ui.writeMessageXY_small("H: " + String(nombreDeHandshakes), 248, 33, false);
-        ui.writeMessageXY_small("EAPOL: " + String(nombreDeEAPOL), 202, 51, false);
-        ui.writeMessageXY_small("DEAUTH: " + String(nombreDeDeauth), 188, 69, false);
+        ui.writeMessageXY_small("PPS: " + String(packetCount), 180, 15, false);
+        ui.writeMessageXY_small("H: " + String(nombreDeHandshakes), 228, 35, false);
+        ui.writeMessageXY_small("EAPOL: " + String(nombreDeEAPOL), 182, 55, false);
+        ui.writeMessageXY_small("DEAUTH: " + String(nombreDeDeauth), 168, 75, false);
         packetCount = 0;
     }
 }

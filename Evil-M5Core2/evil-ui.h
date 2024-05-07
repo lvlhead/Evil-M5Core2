@@ -52,6 +52,7 @@ class EvilUI {
     void aboutScreen(String message);
     void clearAppScreen();
     bool clearScreenDelay();
+    bool waitToRefresh();
     // TODO: Remove old Menu functions
     void waitAndReturnToMenu(String message);
 

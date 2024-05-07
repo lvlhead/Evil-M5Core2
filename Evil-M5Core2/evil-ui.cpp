@@ -60,9 +60,9 @@ void EvilUI::writeMessageXY(String message, int x, int y, bool clearScreen = fal
         M5.Display.clear();
     }
     M5.Display.setTextSize(2);
-    M5.Display.setTextColor(TFT_BLACK);
+    M5.Display.setTextColor(TFT_BLACK, TFT_LIGHTGREY);
     M5.Display.setCursor(x, y);
-    M5.Display.println(message);
+    M5.Display.println(message + "    ");
 }
 
 void EvilUI::writeMessageXY_small(String message, int x, int y, bool clearScreen = false) {
@@ -70,20 +70,20 @@ void EvilUI::writeMessageXY_small(String message, int x, int y, bool clearScreen
         M5.Display.clear();
     }
     M5.Display.setTextSize(1.5);
-    M5.Display.setTextColor(TFT_BLACK);
+    M5.Display.setTextColor(TFT_BLACK, TFT_LIGHTGREY);
     M5.Display.setCursor(x, y);
-    M5.Display.println(message);
+    M5.Display.println(message + "   ");
 }
 
 void EvilUI::writeVectorMessage(std::vector<String> messages, int x, int y, int incr) {
     //M5.Display.clear();
     M5.Display.setTextSize(2);
-    M5.Display.setTextColor(TFT_BLACK);
+    M5.Display.setTextColor(TFT_BLACK, TFT_LIGHTGREY);
 
     for (int i = 0; i < messages.size(); i++)
     {
         M5.Display.setCursor(x, y);
-        M5.Display.println(messages[i]);
+        M5.Display.println(messages[i] + "   ");
         y += incr;
     }
 
@@ -141,6 +141,15 @@ bool EvilUI::confirmPopup(String message, bool clearScreen) {
 
 void EvilUI::clearAppScreen() {
     M5.Display.fillRect(0, 0, M5.Display.width(), 200, TFT_LIGHTGREY);
+}
+
+bool EvilUI::waitToRefresh() {
+    unsigned long currentMillis = millis();
+    if (currentMillis - previousMillis >= 1000) {
+            previousMillis = currentMillis;
+            return true;
+    }
+    return false;
 }
 
 bool EvilUI::clearScreenDelay() {
