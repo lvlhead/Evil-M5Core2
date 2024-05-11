@@ -84,6 +84,8 @@ EvilWoF flipper;
 Menu mainMenu("Main Menu");
 Menu subMenuSettings("Settings");
 Menu subMenuChangePortal("Change Portal");   // Lists all portal files in /sites and sets portal file in use
+Menu subMenuDeauth("Deauther");
+Menu subMenuDeauthConfig("Deauther Config");
 
 // Web and DNS Servers
 WebServer server(80);
@@ -169,7 +171,6 @@ const long interval = 1000;
 static constexpr const gpio_num_t SDCARD_CSPIN = GPIO_NUM_4;
 
 // Global Variables
-bool bluetoothEnabled;
 bool isCaptivePortalOn;
 String selectedPortalFile;
 String currentClonedSSID;
@@ -416,7 +417,7 @@ void setup() {
     mainMenu.addMenuItem("Stop Captive Portal", stopCaptivePortal);
     mainMenu.addMenuItem("Wardriving", wardrive.emptyWardriveCallback, showWardriveMode);
     mainMenu.addMenuItem("Beacon Spam", beacon.emptyBeaconCallback, showBeaconAttack);
-    mainMenu.addMenuItem("Handshake/Deauth Sniffing", detector.emptyDetectorCallback, showDetector);
+    mainMenu.addSubMenu("Deauther", &subMenuDeauth);
     mainMenu.addMenuItem("Wall of Flipper", flipper.emptyWoFCallback, showWoFScanner);
     mainMenu.addSubMenu("Settings", &subMenuSettings);
 
@@ -428,15 +429,24 @@ void setup() {
     subMenuSettings.addMenuItem("Delete All Credentials", deleteCredentials);
     subMenuSettings.addMenuItem("Delete All Probes", deleteAllProbes);
 
+    // Define Deauther Menu
+    subMenuDeauth.addSubMenu("Deauth Config", &subMenuDeauthConfig);
+    subMenuDeauth.addMenuItem("Deauther Attack", detector.emptyDeautherCallback, showDeauther);
+    subMenuDeauth.addMenuItem("Handshake/Deauth Sniffing", detector.emptyDetectorCallback, showDetector);
+
+    // Define Deauth Config Menu
+    subMenuDeauthConfig.addMenuItem("Sniff EAPOL?", toggleDeauthSniffEAPOL);
+
     // Customize the menu layouts, currently to set menu width/height
     customizeLayout(mainMenu.getLayout());
     customizeLayout(subMenuSettings.getLayout());
     customizeLayout(subMenuChangePortal.getLayout());
+    customizeLayout(subMenuDeauth.getLayout());
+    customizeLayout(subMenuDeauthConfig.getLayout());
 
     // TODO: Remove random initialization of global variables
     currentClonedSSID = "Evil-M5Core2";
     isCaptivePortalOn = false;
-    bluetoothEnabled = false;
     currentBrightness = M5.Display.getBrightness();
     selectedPortalFile = "/sites/normal.html"; // defaut portal
     listPortalFiles();
@@ -514,12 +524,22 @@ void showDetector(CallbackMenuItem& menuItem) {
         sendMessage(detector.getAutoChannelHop() ? "Auto Mode" : "Static Mode");
     } else if (M5.BtnB.wasReleased()) {
         // Close app and return to main menu
-        detector.closeApp();
+        detector.closeDetectorApp();
         menuItem.deactivateCallbacks();
     } else if (M5.BtnC.wasReleased()) {
         if (!detector.getAutoChannelHop()) {
             detector.incrementChannel(1);
         }
+    }
+}
+
+void showDeauther(CallbackMenuItem& menuItem) {
+    detector.showDeautherApp();
+
+    if (M5.BtnB.wasReleased()) {
+        // Close app and return to main menu
+        detector.closeDeautherApp();
+        menuItem.deactivateCallbacks();
     }
 }
 
@@ -636,7 +656,7 @@ void showWifiDetailSelect(CallbackMenuItem& menuItem) {
     messages.push_back("Security: " + (security.length() > 0 ? security : "N/A"));
     messages.push_back("Signal: " + (rssi != 0 ? String(rssi) + " dBm" : "N/A"));
     messages.push_back("MAC: " + (macAddress.length() > 0 ? macAddress : "N/A"));
-    ui.writeVectorMessage(messages, 10, 20, 25);
+    ui.writeVectorMessage(messages, 10, 20, 32);
 
     if (updateScreen) {
         ui.clearAppScreen();
@@ -650,6 +670,14 @@ void showWifiDetailSelect(CallbackMenuItem& menuItem) {
     }
 }
 
+void toggleDeauthSniffEAPOL(CallbackMenuItem& menuItem) {
+    detector.toggleCfgSniffEAPOL();
+    if (detector.getCfgSniffEAPOL()) {
+        ui.waitAndReturnToMenu("Sniff EAPOL Enabled");
+    } else {
+        ui.waitAndReturnToMenu("Sniff EAPOL Disabled");
+    }
+}
 
 void deleteCredentials(CallbackMenuItem& menuItem) {
     if (ui.confirmPopup("Delete credentials?", true)) {
@@ -1561,7 +1589,7 @@ void startScanKarma() {
     ssid_count_Karma = 0;
     M5.Display.clear();
     drawStopButtonKarma();
-    bluetoothEnabled = false;
+    //bluetoothEnabled = false;
     esp_wifi_set_promiscuous(false);
     esp_wifi_stop();
     esp_wifi_set_promiscuous_rx_cb(NULL);
@@ -2188,7 +2216,7 @@ void probeAttack() {
 bool isAPDeploying = false;
 
 void startAutoKarma() {
-    bluetoothEnabled = false;
+    //bluetoothEnabled = false;
     esp_wifi_set_promiscuous(false);
     esp_wifi_stop();
     esp_wifi_set_promiscuous_rx_cb(NULL);
@@ -2368,7 +2396,7 @@ void activateAPForAutoKarma(const char* ssid) {
 
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_MODE_STA);
-    bluetoothEnabled = false;
+    //bluetoothEnabled = false;
     esp_wifi_set_promiscuous(false);
     esp_wifi_stop();
     esp_wifi_set_promiscuous_rx_cb(NULL);

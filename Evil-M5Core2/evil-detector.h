@@ -63,17 +63,35 @@ extern String pwnagotchiName;
 extern String pwnagotchiPwnd;
 extern bool detectedEAPOL;
 
+// Deauther esp_wifi callback
+extern "C" void snifferCallbackDeauth(void* buf, wifi_promiscuous_pkt_type_t type);
+extern "C" void sendDeauthPacket();
+extern "C" void updateMacAddresses(uint8_t* bssid);
+
+// Deauther Attack Variables
+extern uint8_t source_mac[];   // MAC source
+extern uint8_t receiver_mac[]; // MAC client - brodcast - should not work on some device that need to be mac spoofed
+extern uint8_t ap_mac[];   // MAC access point
+extern const uint8_t deauth_frame_default[];
+extern String ssid;
+extern uint8_t* bssid;
+
 class EvilDetector {
   public:
     EvilDetector();
     void init();
     void showDetectorApp();
-    void closeApp();
+    void closeDetectorApp();
+    void showDeautherApp();
+    void closeDeautherApp();
     static void emptyDetectorCallback(CallbackMenuItem& menuItem);
+    static void emptyDeautherCallback(CallbackMenuItem& menuItem);
     void toggleAppRunning();
     void toggleAutoChannelHop();
     bool getAutoChannelHop();
     void incrementChannel(int count);
+    void toggleCfgSniffEAPOL();
+    bool getCfgSniffEAPOL();
 
   private:
     EvilUI ui;
@@ -81,11 +99,16 @@ class EvilDetector {
     bool isAppRunning;
     bool updateScreen;
     bool autoChannelHop; // Starts in auto mode
+    int deauthCount;
     int currentChannelDeauth;
+    int channel;
+    String ssid;
+    String macAddress;
     String channelType;
     bool lastDisplayedMode; // Initialize to the opposite to force the first update
     int maxChannelScanning;
     File pcapFile;
+    bool cfg_sniffEAPOL;
 };
 
 #endif

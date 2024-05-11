@@ -48,10 +48,10 @@ File openFile(String filename, const char* mode);
 void sendMessage(String message);
 
 extern int currentBrightness;
-extern bool bluetoothEnabled;
 extern String currentClonedSSID;
 extern bool isCaptivePortalOn;
 extern String selectedPortalFile;
 extern String ssidList[100];
+extern int networkIndex;
 
 #endif

@@ -106,7 +106,6 @@ void EvilMonitor::Page1() {
     messages.push_back("SSID: " + currentClonedSSID);
     messages.push_back("Portal: " + String(isCaptivePortalOn ? "On" : "Off"));
     messages.push_back("Page: " + selectedPortalFile.substring(7));
-    messages.push_back("Bluetooth: " + String(bluetoothEnabled ? "On" : "Off"));
     ui.writeVectorMessage(messages, 10, 30, 30);
 
     oldNumClients = newNumClients;
@@ -150,7 +149,6 @@ String EvilMonitor::getMonitoringStatus() {
     status += "SSID: " + currentClonedSSID + "\n";
     status += "Portal: " + String(isCaptivePortalOn ? "On" : "Off") + "\n";
     status += "Page: " + String(selectedPortalFile.substring(7)) + "\n";
-    status += "Bluetooth: " + String(bluetoothEnabled ? "ON" : "OFF") + "\n";
     updateConnectedMACs();
     status += "Connected MACs:\n";
     for (int i = 0; i < 10; i++) {
