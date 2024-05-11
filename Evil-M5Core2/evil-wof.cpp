@@ -170,9 +170,7 @@ void EvilWoF::showWoFApp() {
     }
 
     // Run the app
-    if (ui.clearScreenDelay()) {
-        ui.writeMessageXY("Waiting for Flipper", 0, 10, false);
-    }
+    ui.writeMessageXY("Waiting for Flipper", 0, 10, false);
     BLEScan* pBLEScan = BLEDevice::getScan();
     pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks(), true);
     pBLEScan->setActiveScan(true);
