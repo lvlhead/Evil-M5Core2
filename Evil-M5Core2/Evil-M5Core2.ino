@@ -745,46 +745,6 @@ void handleDnsRequestSerial() {
     }
 }
 
-
-void listProbesSerial() {
-    File file = openFile("/probes.txt", FILE_READ);
-
-    int probeIndex = 0;
-    sendMessage("List of Probes:");
-    while (file.available()) {
-        String probe = file.readStringUntil('\n');
-        probe.trim();
-        if (probe.length() > 0) {
-            sendMessage(String(probeIndex) + ": " + probe);
-            probeIndex++;
-        }
-    }
-    file.close();
-}
-
-void selectProbeSerial(int index) {
-    File file = openFile("/probes.txt", FILE_READ);
-
-    int currentIndex = 0;
-    String selectedProbe = "";
-    while (file.available()) {
-        String probe = file.readStringUntil('\n');
-        if (currentIndex == index) {
-            selectedProbe = probe;
-            break;
-        }
-        currentIndex++;
-    }
-    file.close();
-
-    if (selectedProbe.length() > 0) {
-        currentClonedSSID = selectedProbe;
-        sendMessage("Probe selected: " + selectedProbe);
-    } else {
-        sendMessage("Probe index not found.");
-    }
-}
-
 String currentlySelectedSSID = "";
 bool isProbeAttackRunning = false;
 bool stopProbeSniffingViaSerial = false;
@@ -796,27 +756,6 @@ void selectNetwork(int index) {
         sendMessage("SSID selection: " + currentlySelectedSSID);
     } else {
         sendMessage("SSID index invalid.");
-    }
-}
-
-
-void checkCredentialsSerial() {
-    File file = openFile("/credentials.txt", FILE_READ);
-
-    bool isEmpty = true;
-    sendMessage("----------------------");
-    sendMessage("Credentials Found:");
-    sendMessage("----------------------");
-    while (file.available()) {
-        String line = file.readStringUntil('\n');
-        if (line.length() > 0) {
-            sendMessage(line);
-            isEmpty = false;
-        }
-    }
-    file.close();
-    if (isEmpty) {
-        sendMessage("No credentials found.");
     }
 }
 
