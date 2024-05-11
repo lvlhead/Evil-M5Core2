@@ -270,11 +270,11 @@ void EvilWardrive::createKarmaList(int maxIndex) {
 
 String EvilWardrive::createPreHeader() {
     String preHeader = "WigleWifi-1.4";
-    preHeader += ",appRelease=v1.1.9"; // Remplacez [version] par la version de votre application
+    preHeader += ",appRelease=" + String(APP_VERSION); // Remplacez [version] par la version de votre application
     preHeader += ",model=Core2";
-    preHeader += ",release=v1.1.9"; // Remplacez [release] par la version de l'OS de l'appareil
-    preHeader += ",device=Evil-M5Core2"; // Remplacez [device name] par un nom de périphérique, si souhaité
-    preHeader += ",display=7h30th3r0n3"; // Ajoutez les caractéristiques d'affichage, si pertinent
+    preHeader += ",release=" + String(APP_VERSION); // Remplacez [release] par la version de l'OS de l'appareil
+    preHeader += ",device=" + String(APP_NAME); // Remplacez [device name] par un nom de périphérique, si souhaité
+    preHeader += ",display=lvlhead/7h30th3r0n3"; // Ajoutez les caractéristiques d'affichage, si pertinent
     preHeader += ",board=M5Stack Core2";
     preHeader += ",brand=M5Stack";
     return preHeader;

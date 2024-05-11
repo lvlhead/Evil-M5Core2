@@ -100,8 +100,8 @@ void EvilUI::aboutScreen(String message) {
     M5.Display.drawLine(0, lineY1, M5.Display.width(), lineY1, BLACK);
     M5.Display.drawLine(0, lineY2, M5.Display.width(), lineY2, BLACK);
 
-    writeMessageXY("Evil-M5Core2", 80, 80, false);
-    writeMessageXY("By 7h30th3r0n3", 75, 100, false);
+    writeMessageXY(APP_NAME, 80, 80, false);
+    writeMessageXY("By lvlhead/7h30th3r0n3", 55, 100, false);
     writeMessageXY(APP_VERSION, 102, 125, false);
     writeMessageXY(message, 0, 200, false);
 }

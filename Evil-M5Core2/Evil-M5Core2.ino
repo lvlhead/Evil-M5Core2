@@ -387,8 +387,8 @@ void setup() {
     // Display about screen
     ui.aboutScreen(randomMessage);
     sendMessage("-------------------");
-    sendMessage(" Evil-M5Core2");
-    sendMessage("By 7h30th3r0n3");
+    sendMessage(APP_NAME);
+    sendMessage("By lvlhead/7h30th3r0n3");
     sendMessage(APP_VERSION);
     sendMessage("-------------------");
     sendMessage(" ");
@@ -445,7 +445,7 @@ void setup() {
     customizeLayout(subMenuDeauthConfig.getLayout());
 
     // TODO: Remove random initialization of global variables
-    currentClonedSSID = "Evil-M5Core2";
+    currentClonedSSID = APP_NAME;
     isCaptivePortalOn = false;
     currentBrightness = M5.Display.getBrightness();
     selectedPortalFile = "/sites/normal.html"; // defaut portal
@@ -790,7 +790,7 @@ String bssidToString(uint8_t* bssid) {
 }
 
 void createCaptivePortal(CallbackMenuItem& menuItem) {
-    String ssid = currentClonedSSID.isEmpty() ? "Evil-M5Core2" : currentClonedSSID;
+    String ssid = currentClonedSSID.isEmpty() ? APP_NAME : currentClonedSSID;
     WiFi.mode(WIFI_MODE_APSTA);
     if (!isAutoKarmaActive){
         if (captivePortalPassword == ""){
