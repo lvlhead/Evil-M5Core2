@@ -37,6 +37,8 @@ extern "C" {
 
 #include "evil-util.h"
 
+char ssidsKarma[MAX_SSIDS_Karma][33];
+
 File openFile(String filename, const char* mode = FILE_READ) {
     File file = SD.open(filename, mode);
     if (!file) {

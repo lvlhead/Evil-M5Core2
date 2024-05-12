@@ -44,6 +44,7 @@
 #define WIFI_SSID ""  // ssid to connect,connection skipped at boot if stay blank ( can be shutdown by different action like probe attack)
 #define WIFI_PASSWORD ""  // wifi password
 #define BLUETOOTH_NAME "E7vhi3l0tMh53Cro0rne32"
+#define MAX_SSIDS_Karma 200
 
 File openFile(String filename, const char* mode);
 void sendMessage(String message);
@@ -54,5 +55,6 @@ extern bool isCaptivePortalOn;
 extern String selectedPortalFile;
 extern String ssidList[100];
 extern int networkIndex;
+extern char ssidsKarma[MAX_SSIDS_Karma][33];
 
 #endif
